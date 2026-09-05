@@ -1,0 +1,289 @@
+//! The flexbox style constraint layout solver.
+//!
+//! The solver runs top down. Given a root node and an available size it assigns
+//! an absolute border box rectangle to every node in the tree. A border box
+//! includes the node border and padding but excludes its margin.
+
+use crate::geometry::{Rect, Size};
+use crate::style::{Align, Dimension, Direction, Justify};
+use crate::widget::Node;
+
+fn axis_main(s: Size, dir: Direction) -> f64 {
+    match dir {
+        Direction::Row => s.w,
+        Direction::Column => s.h,
+    }
+}
+
+fn axis_cross(s: Size, dir: Direction) -> f64 {
+    match dir {
+        Direction::Row => s.h,
+        Direction::Column => s.w,
+    }
+}
+
+fn from_axes(dir: Direction, main: f64, cross: f64) -> Size {
+    match dir {
+        Direction::Row => Size::new(main, cross),
+        Direction::Column => Size::new(cross, main),
+    }
+}
+
+/// The natural border box size of a node with no external constraint. For a
+/// leaf this is the intrinsic content size plus padding and border, unless a
+/// fixed size overrides it. For a container it is the shrink to fit size of its
+/// children plus its own padding and border.
+pub fn natural_size(node: &Node) -> Size {
+    let s = &node.style;
+    let inner = s.inner();
+    let content = if node.is_container() {
+        container_content_size(node)
+    } else {
+        node.leaf_content_size()
+    };
+    let w = match s.width {
+        Dimension::Points(v) => v,
+        Dimension::Auto => content.w + inner.horizontal(),
+    };
+    let h = match s.height {
+        Dimension::Points(v) => v,
+        Dimension::Auto => content.h + inner.vertical(),
+    };
+    Size::new(w.max(0.0), h.max(0.0))
+}
+
+/// The natural content size of a container derived from its children. The main
+/// axis is the sum of child main sizes, gaps and child main margins. The cross
+/// axis is the largest child cross size including its cross margins.
+fn container_content_size(node: &Node) -> Size {
+    let dir = node.style.direction;
+    let n = node.children.len();
+    let mut main = 0.0;
+    let mut cross: f64 = 0.0;
+    for child in &node.children {
+        let cs = natural_size(child);
+        let m = &child.style.margin;
+        main += axis_main(cs, dir) + m.main_total(dir);
+        cross = cross.max(axis_cross(cs, dir) + m.cross_total(dir));
+    }
+    if n > 1 {
+        main += node.style.gap * (n as f64 - 1.0);
+    }
+    from_axes(dir, main, cross)
+}
+
+/// Runs layout for a whole tree. The root takes its fixed size if one is set,
+/// otherwise it fills the available size.
+pub fn compute_layout(root: &mut Node, avail: Size) {
+    let w = root.style.width.resolve_or(avail.w);
+    let h = root.style.height.resolve_or(avail.h);
+    layout_node(root, Rect::new(0.0, 0.0, w.max(0.0), h.max(0.0)));
+}
+
+/// Assigns `rect` as this node border box, then arranges its children inside
+/// the resulting content box.
+fn layout_node(node: &mut Node, rect: Rect) {
+    node.rect = Rect::new(rect.x, rect.y, rect.w.max(0.0), rect.h.max(0.0));
+    if !node.is_container() || node.children.is_empty() {
+        return;
+    }
+    arrange_children(node);
+}
+
+fn justify_offset(justify: Justify, free: f64, n: usize) -> (f64, f64) {
+    match justify {
+        Justify::Start => (0.0, 0.0),
+        Justify::Center => (free / 2.0, 0.0),
+        Justify::End => (free, 0.0),
+        Justify::SpaceBetween => {
+            if n > 1 {
+                (0.0, free / (n as f64 - 1.0))
+            } else {
+                (free / 2.0, 0.0)
+            }
+        }
+    }
+}
+
+fn align_offset(align: Align, cross_free: f64) -> f64 {
+    match align {
+        Align::Start | Align::Stretch => 0.0,
+        Align::Center => cross_free / 2.0,
+        Align::End => cross_free,
+    }
+}
+
+fn arrange_children(node: &mut Node) {
+    let dir = node.style.direction;
+    let align = node.style.align;
+    let justify = node.style.justify;
+    let gap = node.style.gap;
+    let inner = node.style.inner();
+
+    let content_x = node.rect.x + inner.left;
+    let content_y = node.rect.y + inner.top;
+    let content_w = (node.rect.w - inner.horizontal()).max(0.0);
+    let content_h = (node.rect.h - inner.vertical()).max(0.0);
+    let content = Size::new(content_w, content_h);
+    let main_avail = axis_main(content, dir);
+    let cross_avail = axis_cross(content, dir);
+
+    let n = node.children.len();
+    let total_gap = if n > 1 { gap * (n as f64 - 1.0) } else { 0.0 };
+
+    // Per child measurements along the main axis.
+    let naturals: Vec<Size> = node.children.iter().map(natural_size).collect();
+    let base: Vec<f64> = node
+        .children
+        .iter()
+        .zip(naturals.iter())
+        .map(|(child, nat)| match child.style.main_dim(dir) {
+            Dimension::Points(v) => v.max(0.0),
+            Dimension::Auto => axis_main(*nat, dir),
+        })
+        .collect();
+    let grow: Vec<f64> = node.children.iter().map(|c| c.style.flex_grow).collect();
+    let shrink: Vec<f64> = node.children.iter().map(|c| c.style.flex_shrink).collect();
+
+    let used_margin: f64 = node
+        .children
+        .iter()
+        .map(|c| c.style.margin.main_total(dir))
+        .sum();
+    let base_sum: f64 = base.iter().sum();
+    let free = main_avail - base_sum - used_margin - total_gap;
+    let total_grow: f64 = grow.iter().sum();
+
+    let mut main_size = base.clone();
+    let grew = free > 0.0 && total_grow > 0.0;
+    if grew {
+        for (ms, (g, b)) in main_size.iter_mut().zip(grow.iter().zip(base.iter())) {
+            if *g > 0.0 {
+                *ms = *b + free * *g / total_grow;
+            }
+        }
+    } else if free < 0.0 {
+        let total_scaled: f64 = shrink
+            .iter()
+            .zip(base.iter())
+            .map(|(s, b)| s * b)
+            .sum();
+        if total_scaled > 0.0 {
+            for (ms, (s, b)) in main_size.iter_mut().zip(shrink.iter().zip(base.iter())) {
+                let reduce = (-free) * (s * b) / total_scaled;
+                *ms = (*b - reduce).max(0.0);
+            }
+        }
+    }
+
+    // Justify only distributes leftover space when nothing grew to consume it.
+    let (offset, spacing) = if grew {
+        (0.0, 0.0)
+    } else {
+        justify_offset(justify, free.max(0.0), n)
+    };
+
+    let main_origin = match dir {
+        Direction::Row => content_x,
+        Direction::Column => content_y,
+    };
+    let cross_origin = match dir {
+        Direction::Row => content_y,
+        Direction::Column => content_x,
+    };
+
+    let mut cursor = main_origin + offset;
+    for i in 0..n {
+        let margin = node.children[i].style.margin;
+        cursor += margin.main_start(dir);
+
+        let cross_size = match node.children[i].style.cross_dim(dir) {
+            Dimension::Points(v) => v.max(0.0),
+            Dimension::Auto => {
+                if align == Align::Stretch {
+                    (cross_avail - margin.cross_total(dir)).max(0.0)
+                } else {
+                    axis_cross(naturals[i], dir)
+                }
+            }
+        };
+        let cross_free = cross_avail - cross_size - margin.cross_total(dir);
+        let cross_pos = cross_origin + margin.cross_start(dir) + align_offset(align, cross_free);
+
+        let child_rect = match dir {
+            Direction::Row => Rect::new(cursor, cross_pos, main_size[i], cross_size),
+            Direction::Column => Rect::new(cross_pos, cursor, cross_size, main_size[i]),
+        };
+        layout_node(&mut node.children[i], child_rect);
+
+        cursor += main_size[i] + margin.main_end(dir);
+        if i + 1 < n {
+            cursor += gap + spacing;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::style::EdgeInsets;
+    use crate::widget::{assign_ids, Node};
+
+    #[test]
+    fn single_flex_child_fills_main_axis() {
+        let mut root = Node::row()
+            .width(100.0)
+            .height(40.0)
+            .child(Node::boxed().grow(1.0));
+        assign_ids(&mut root);
+        compute_layout(&mut root, Size::new(100.0, 40.0));
+        assert_eq!(root.children[0].rect, Rect::new(0.0, 0.0, 100.0, 40.0));
+    }
+
+    #[test]
+    fn two_equal_flex_children_split_main_axis() {
+        let mut root = Node::row()
+            .width(100.0)
+            .height(20.0)
+            .child(Node::boxed().grow(1.0))
+            .child(Node::boxed().grow(1.0));
+        compute_layout(&mut root, Size::new(100.0, 20.0));
+        assert_eq!(root.children[0].rect, Rect::new(0.0, 0.0, 50.0, 20.0));
+        assert_eq!(root.children[1].rect, Rect::new(50.0, 0.0, 50.0, 20.0));
+    }
+
+    #[test]
+    fn padding_shrinks_content_box() {
+        let mut root = Node::row()
+            .width(100.0)
+            .height(100.0)
+            .padding(EdgeInsets::all(10.0))
+            .child(Node::boxed().grow(1.0));
+        compute_layout(&mut root, Size::new(100.0, 100.0));
+        assert_eq!(root.children[0].rect, Rect::new(10.0, 10.0, 80.0, 80.0));
+    }
+
+    #[test]
+    fn gap_between_flex_children() {
+        let mut root = Node::row()
+            .width(100.0)
+            .height(10.0)
+            .gap(10.0)
+            .child(Node::boxed().grow(1.0))
+            .child(Node::boxed().grow(1.0));
+        compute_layout(&mut root, Size::new(100.0, 10.0));
+        assert_eq!(root.children[0].rect, Rect::new(0.0, 0.0, 45.0, 10.0));
+        assert_eq!(root.children[1].rect, Rect::new(55.0, 0.0, 45.0, 10.0));
+    }
+
+    #[test]
+    fn justify_center_positions_fixed_child() {
+        let mut root = Node::row()
+            .width(100.0)
+            .height(10.0)
+            .justify(Justify::Center)
+            .child(Node::boxed().width(20.0).height(10.0));
+        compute_layout(&mut root, Size::new(100.0, 10.0));
+        assert_eq!(root.children[0].rect, Rect::new(40.0, 0.0, 20.0, 10.0));
+    }
+}
