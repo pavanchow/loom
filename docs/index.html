@@ -2,11 +2,786 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>loom</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loom Playground</title>
+<style>
+  /* Base theme. Light by default. All colors flow through CSS variables so the
+     dark override below only has to redeclare the variables and the body. */
+  :root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-2: #fbfbfd;
+    --ink: #1d1d1f;
+    --ink-soft: #6e6e73;
+    --line: #d2d2d7;
+    --accent: #0071e3;
+    --accent-soft: #e8f1fe;
+    --stage: #f0f0f3;
+    --node-fill: rgba(0, 113, 227, 0.10);
+    --node-stroke: rgba(0, 113, 227, 0.55);
+    --node-sel: rgba(255, 149, 0, 0.18);
+    --node-sel-stroke: #ff9500;
+    --leaf-fill: rgba(52, 199, 89, 0.14);
+    --leaf-stroke: rgba(40, 160, 70, 0.6);
+    --label: #1d1d1f;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  /* Dark override. This block MUST come after the base body rule and must
+     redeclare both the variables and the body background, otherwise a dark
+     Chrome would keep the light body background under dark text. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --panel: #1c1c1e;
+      --panel-2: #161618;
+      --ink: #f5f5f7;
+      --ink-soft: #98989d;
+      --line: #38383a;
+      --accent: #0a84ff;
+      --accent-soft: #12233b;
+      --stage: #0e0e10;
+      --node-fill: rgba(10, 132, 255, 0.16);
+      --node-stroke: rgba(10, 132, 255, 0.7);
+      --node-sel: rgba(255, 159, 10, 0.22);
+      --node-sel-stroke: #ff9f0a;
+      --leaf-fill: rgba(48, 209, 88, 0.18);
+      --leaf-stroke: rgba(48, 209, 88, 0.7);
+      --label: #f5f5f7;
+      --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.5);
+    }
+    body { background: var(--bg); color: var(--ink); }
+  }
+
+  header {
+    padding: 32px 24px 8px;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+  header h1 { font-size: 34px; letter-spacing: -0.02em; margin: 0 0 4px; }
+  header p { color: var(--ink-soft); margin: 0; max-width: 60ch; }
+  header a { color: var(--accent); text-decoration: none; }
+  header a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 16px 24px 64px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 300px 1fr 300px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 1040px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 16px;
+  }
+  .card h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-soft); margin: 0 0 12px;
+  }
+
+  label.field { display: block; margin: 0 0 12px; font-size: 13px; color: var(--ink-soft); }
+  label.field span.lbl { display: block; margin-bottom: 4px; font-weight: 600; color: var(--ink); }
+
+  select, input[type="number"] {
+    width: 100%; padding: 7px 9px; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+    font-family: var(--sans); font-size: 14px;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  input[type="checkbox"] { accent-color: var(--accent); }
+
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+
+  button.btn {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+    padding: 7px 10px; border-radius: 9px; font-size: 13px; cursor: pointer;
+    font-family: var(--sans); transition: background 0.15s, border-color 0.15s;
+  }
+  button.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.btn.danger:hover:not(:disabled) { border-color: #ff3b30; color: #ff3b30; }
+
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .muted { color: var(--ink-soft); font-size: 12px; }
+  .kbd { font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--line);
+         border-radius: 6px; padding: 1px 6px; font-size: 12px; }
+
+  /* Stage */
+  .stagewrap { position: relative; }
+  .sizebar { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .sizebar .grp { flex: 1; min-width: 180px; }
+  .stage-outer {
+    background: var(--stage); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; overflow: auto;
+  }
+  .stage {
+    position: relative; background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 100% 40px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 40px 100%;
+    background-color: var(--panel);
+    border: 1px dashed var(--node-stroke);
+    border-radius: 6px;
+    margin: 0 auto;
+  }
+  .box {
+    position: absolute; border-radius: 5px; overflow: hidden;
+    background: var(--node-fill); border: 1px solid var(--node-stroke);
+    cursor: pointer; transition: background 0.12s;
+  }
+  .box.leaf { background: var(--leaf-fill); border-color: var(--leaf-stroke); }
+  .box.selected { background: var(--node-sel); border: 2px solid var(--node-sel-stroke); }
+  .box .tag {
+    font-family: var(--mono); font-size: 10px; line-height: 1.25; color: var(--label);
+    padding: 2px 4px; pointer-events: none; white-space: nowrap;
+  }
+  .box .tag b { font-weight: 700; }
+
+  /* Tree */
+  ul.tree { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 13px; }
+  ul.tree ul { list-style: none; margin: 0; padding-left: 16px; border-left: 1px dashed var(--line); }
+  ul.tree li { margin: 2px 0; }
+  .treerow {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
+    border-radius: 7px; cursor: pointer;
+  }
+  .treerow:hover { background: var(--accent-soft); }
+  .treerow.selected { background: var(--node-sel); outline: 1px solid var(--node-sel-stroke); }
+  .treerow .rk { color: var(--ink-soft); }
+  .treerow .rid { color: var(--accent); font-weight: 700; }
+
+  /* Help */
+  .help { margin-top: 24px; }
+  .help h2 { font-size: 20px; text-transform: none; letter-spacing: -0.01em; color: var(--ink); }
+  .help h3 { font-size: 15px; margin: 18px 0 6px; }
+  .help ol, .help ul { padding-left: 20px; }
+  .help li { margin: 5px 0; }
+  .help .tour { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  code { font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--line);
+         border-radius: 6px; padding: 1px 5px; font-size: 13px; }
+</style>
 </head>
 <body>
-<h1>loom</h1>
-<p>Site coming soon.</p>
-<p><a href="https://github.com/pavanchow/loom">View repository</a></p>
+<header>
+  <h1>Loom Playground</h1>
+  <p>
+    A live, teaching-accurate reimplementation of the Loom layout solver. Build a
+    tree, set flex and spacing, and drag the size slider to watch every box
+    reflow. This page runs the same algorithm as the Rust engine at
+    <a href="https://github.com/pavanchow/loom">github.com/pavanchow/loom</a>.
+  </p>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+    <!-- Left: controls -->
+    <div class="card" id="controls">
+      <h2>Inspector</h2>
+      <div id="sel-info" class="muted" style="margin-bottom:12px;"></div>
+
+      <div id="container-controls">
+        <label class="field">
+          <span class="lbl">Direction</span>
+          <select id="c-dir">
+            <option value="Row">Row (horizontal)</option>
+            <option value="Column">Column (vertical)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="lbl">Justify (main axis)</span>
+          <select id="c-justify">
+            <option value="Start">Start</option>
+            <option value="Center">Center</option>
+            <option value="End">End</option>
+            <option value="SpaceBetween">Space between</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="lbl">Align (cross axis)</span>
+          <select id="c-align">
+            <option value="Stretch">Stretch</option>
+            <option value="Start">Start</option>
+            <option value="Center">Center</option>
+            <option value="End">End</option>
+          </select>
+        </label>
+        <div class="row">
+          <label class="field"><span class="lbl">Gap</span><input type="number" id="c-gap" min="0" step="1"></label>
+          <label class="field"><span class="lbl">Padding</span><input type="number" id="c-pad" min="0" step="1"></label>
+        </div>
+      </div>
+
+      <div class="row">
+        <label class="field"><span class="lbl">Border</span><input type="number" id="c-border" min="0" step="1"></label>
+        <label class="field"><span class="lbl">Margin</span><input type="number" id="c-margin" min="0" step="1"></label>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="lbl">Width <input type="checkbox" id="c-wauto"> auto</span>
+          <input type="number" id="c-width" min="0" step="1">
+        </label>
+        <label class="field">
+          <span class="lbl">Height <input type="checkbox" id="c-hauto"> auto</span>
+          <input type="number" id="c-height" min="0" step="1">
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="field"><span class="lbl">Flex grow</span><input type="number" id="c-grow" min="0" step="1"></label>
+        <label class="field"><span class="lbl">Flex shrink</span><input type="number" id="c-shrink" min="0" step="1"></label>
+      </div>
+
+      <h2 style="margin-top:8px;">Add child</h2>
+      <div class="muted" id="add-note" style="margin-bottom:8px;"></div>
+      <div class="btn-grid">
+        <button class="btn" data-add="row">+ Row</button>
+        <button class="btn" data-add="column">+ Column</button>
+        <button class="btn" data-add="text">+ Text</button>
+        <button class="btn" data-add="button">+ Button</button>
+        <button class="btn" data-add="box">+ Box</button>
+        <button class="btn" data-add="spacer">+ Spacer</button>
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:8px;">
+        <button class="btn danger" id="btn-delete" style="flex:1;">Delete node</button>
+        <button class="btn" id="btn-reset" style="flex:1;">Reset sample</button>
+      </div>
+    </div>
+
+    <!-- Center: stage -->
+    <div class="card stagewrap">
+      <h2>Rendered layout</h2>
+      <div class="sizebar">
+        <div class="grp">
+          <div class="muted">Container width: <b id="lbl-w">800</b> px</div>
+          <input type="range" id="size-w" min="240" max="1000" value="800">
+        </div>
+        <div class="grp">
+          <div class="muted">Container height: <b id="lbl-h">520</b> px</div>
+          <input type="range" id="size-h" min="200" max="760" value="520">
+        </div>
+      </div>
+      <div class="stage-outer">
+        <div class="stage" id="stage"></div>
+      </div>
+      <p class="muted" style="margin-top:10px;">
+        Each label shows <span class="kbd">#id kind</span> and the computed rectangle
+        <span class="kbd">x, y &nbsp; w &times; h</span>. Click any box to select it.
+        Green boxes are leaf widgets, blue boxes are containers.
+      </p>
+    </div>
+
+    <!-- Right: tree -->
+    <div class="card">
+      <h2>Widget tree</h2>
+      <ul class="tree" id="tree"></ul>
+    </div>
+  </div>
+
+  <!-- Help -->
+  <div class="card help">
+    <h2>How to use this playground</h2>
+    <div class="tour">
+      <b>Guided tour.</b> Start with the sample already on the stage. Click the blue
+      toolbar row at the top to select it, then set <b>Justify</b> to
+      <i>Space between</i> and watch its buttons spread apart. Now grab the
+      <b>Container width</b> slider and drag it left and right. Every box with a
+      flex grow reflows in real time. Select the large empty <b>Box</b> in the
+      content area, give it a <b>Flex grow</b> of <code>1</code>, and it will
+      expand to fill the leftover space. Finally select any container and press
+      <b>+ Text</b> to drop a new widget inside it.
+    </div>
+
+    <h3>The controls, one by one</h3>
+    <ol>
+      <li><b>Select a node.</b> Click a box on the stage or a row in the widget
+        tree on the right. The inspector on the left then edits that node.</li>
+      <li><b>Direction.</b> For a container, choose Row to lay children left to
+        right or Column to stack them top to bottom.</li>
+      <li><b>Justify.</b> Distributes leftover space along the main axis. Start,
+        Center, End, or Space between. It only has a visible effect when the
+        children do not already fill the axis through flex grow.</li>
+      <li><b>Align.</b> Positions children on the cross axis. Stretch makes an
+        auto sized child fill the cross axis. Start, Center, and End place it
+        instead.</li>
+      <li><b>Gap.</b> Fixed space inserted between children.</li>
+      <li><b>Padding, Border, Margin.</b> The box model. Padding and border sit
+        inside the box and shrink the content area. Margin sits outside and
+        pushes the box away from its siblings.</li>
+      <li><b>Width and Height.</b> Tick <i>auto</i> to size from content, or
+        untick and type a fixed pixel size for the border box.</li>
+      <li><b>Flex grow.</b> A weight for sharing leftover main axis space. Two
+        children with grow 1 split the space evenly. Grow 1 versus grow 3 splits
+        it one to three.</li>
+      <li><b>Flex shrink.</b> A weight for absorbing overflow when the children
+        do not fit. Higher shrink gives up more space.</li>
+      <li><b>Add child.</b> With a container selected, add a Row, Column, Text,
+        Button, Box, or Spacer inside it.</li>
+      <li><b>Delete node.</b> Removes the selected node and its subtree. The root
+        cannot be deleted.</li>
+      <li><b>Container size sliders.</b> Set the available width and height handed
+        to the root, then watch the whole tree reflow.</li>
+    </ol>
+
+    <h3>Reading the result</h3>
+    <ul>
+      <li>The rectangle on each box is its <b>border box</b>. It includes border
+        and padding but not margin, exactly like the Rust engine.</li>
+      <li>Labels read <code>x, y</code> for the top left corner and
+        <code>w &times; h</code> for the size, all in pixels.</li>
+      <li>The widget tree mirrors the stage. Selecting in one highlights the
+        other.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * Loom layout solver, ported one to one from the Rust core in src/.  *
+ * Same constants, same two passes, same rules.                       *
+ * ------------------------------------------------------------------ */
+
+const CHAR_W = 8.0;
+const LINE_H = 16.0;
+
+let NEXT_ID = 0;
+
+function makeNode(kind, opts) {
+  opts = opts || {};
+  return {
+    id: 0,
+    kind: kind,                       // container | text | button | box | spacer
+    dir: opts.dir || "Row",           // Row | Column
+    justify: opts.justify || "Start",
+    align: opts.align || "Stretch",
+    gap: opts.gap || 0,
+    width: opts.width == null ? null : opts.width,   // null means auto
+    height: opts.height == null ? null : opts.height,
+    grow: opts.grow || 0,
+    shrink: opts.shrink || 0,
+    padding: opts.padding || 0,
+    border: opts.border || 0,
+    margin: opts.margin || 0,
+    text: opts.text || "",
+    children: opts.children || [],
+    rect: { x: 0, y: 0, w: 0, h: 0 },
+  };
+}
+
+function isContainer(n) { return n.kind === "container"; }
+
+function assignIds(root) {
+  NEXT_ID = 0;
+  (function walk(n) { n.id = NEXT_ID++; n.children.forEach(walk); })(root);
+}
+
+// Axis helpers mirror the Rust from_axes / axis_main / axis_cross.
+function axisMain(size, dir) { return dir === "Row" ? size.w : size.h; }
+function axisCross(size, dir) { return dir === "Row" ? size.h : size.w; }
+function fromAxes(dir, main, cross) {
+  return dir === "Row" ? { w: main, h: cross } : { w: cross, h: main };
+}
+
+// Uniform insets in the playground, so every edge equals the same number.
+function innerH(n) { return 2 * (n.border + n.padding); }
+function innerV(n) { return 2 * (n.border + n.padding); }
+
+function leafContentSize(n) {
+  if (n.kind === "text" || n.kind === "button") {
+    return { w: [...n.text].length * CHAR_W, h: LINE_H };
+  }
+  return { w: 0, h: 0 };
+}
+
+function containerContentSize(n) {
+  const dir = n.dir;
+  let main = 0, cross = 0;
+  for (const c of n.children) {
+    const cs = naturalSize(c);
+    main += axisMain(cs, dir) + 2 * c.margin;
+    cross = Math.max(cross, axisCross(cs, dir) + 2 * c.margin);
+  }
+  if (n.children.length > 1) main += n.gap * (n.children.length - 1);
+  return fromAxes(dir, main, cross);
+}
+
+function naturalSize(n) {
+  const content = isContainer(n) ? containerContentSize(n) : leafContentSize(n);
+  const w = n.width != null ? n.width : content.w + innerH(n);
+  const h = n.height != null ? n.height : content.h + innerV(n);
+  return { w: Math.max(0, w), h: Math.max(0, h) };
+}
+
+function mainDim(n, dir) { return dir === "Row" ? n.width : n.height; }
+function crossDim(n, dir) { return dir === "Row" ? n.height : n.width; }
+
+function computeLayout(root, availW, availH) {
+  const w = root.width != null ? root.width : availW;
+  const h = root.height != null ? root.height : availH;
+  layoutNode(root, { x: 0, y: 0, w: Math.max(0, w), h: Math.max(0, h) });
+}
+
+function layoutNode(n, rect) {
+  n.rect = { x: rect.x, y: rect.y, w: Math.max(0, rect.w), h: Math.max(0, rect.h) };
+  if (!isContainer(n) || n.children.length === 0) return;
+  arrangeChildren(n);
+}
+
+function justifyOffset(justify, free, count) {
+  switch (justify) {
+    case "Start": return [0, 0];
+    case "Center": return [free / 2, 0];
+    case "End": return [free, 0];
+    case "SpaceBetween":
+      return count > 1 ? [0, free / (count - 1)] : [free / 2, 0];
+    default: return [0, 0];
+  }
+}
+
+function alignOffset(align, crossFree) {
+  switch (align) {
+    case "Start": case "Stretch": return 0;
+    case "Center": return crossFree / 2;
+    case "End": return crossFree;
+    default: return 0;
+  }
+}
+
+function arrangeChildren(n) {
+  const dir = n.dir, align = n.align, justify = n.justify, gap = n.gap;
+  const ins = n.border + n.padding;
+
+  const contentX = n.rect.x + ins;
+  const contentY = n.rect.y + ins;
+  const contentW = Math.max(0, n.rect.w - 2 * ins);
+  const contentH = Math.max(0, n.rect.h - 2 * ins);
+  const content = { w: contentW, h: contentH };
+  const mainAvail = axisMain(content, dir);
+  const crossAvail = axisCross(content, dir);
+
+  const count = n.children.length;
+  const totalGap = count > 1 ? gap * (count - 1) : 0;
+
+  const naturals = n.children.map(naturalSize);
+  const base = n.children.map((c, i) => {
+    const fixed = mainDim(c, dir);
+    return fixed != null ? Math.max(0, fixed) : axisMain(naturals[i], dir);
+  });
+  const grow = n.children.map(c => c.grow);
+  const shrink = n.children.map(c => c.shrink);
+
+  const usedMargin = n.children.reduce((s, c) => s + 2 * c.margin, 0);
+  const baseSum = base.reduce((s, v) => s + v, 0);
+  const free = mainAvail - baseSum - usedMargin - totalGap;
+  const totalGrow = grow.reduce((s, v) => s + v, 0);
+
+  const mainSize = base.slice();
+  const grew = free > 0 && totalGrow > 0;
+  if (grew) {
+    for (let i = 0; i < count; i++) {
+      if (grow[i] > 0) mainSize[i] = base[i] + free * grow[i] / totalGrow;
+    }
+  } else if (free < 0) {
+    const totalScaled = shrink.reduce((s, v, i) => s + v * base[i], 0);
+    if (totalScaled > 0) {
+      for (let i = 0; i < count; i++) {
+        const reduce = (-free) * (shrink[i] * base[i]) / totalScaled;
+        mainSize[i] = Math.max(0, base[i] - reduce);
+      }
+    }
+  }
+
+  const [offset, spacing] = grew ? [0, 0]
+    : justifyOffset(justify, Math.max(0, free), count);
+
+  const mainOrigin = dir === "Row" ? contentX : contentY;
+  const crossOrigin = dir === "Row" ? contentY : contentX;
+
+  let cursor = mainOrigin + offset;
+  for (let i = 0; i < count; i++) {
+    const c = n.children[i];
+    cursor += c.margin;
+
+    let crossSize;
+    const fixedCross = crossDim(c, dir);
+    if (fixedCross != null) {
+      crossSize = Math.max(0, fixedCross);
+    } else if (align === "Stretch") {
+      crossSize = Math.max(0, crossAvail - 2 * c.margin);
+    } else {
+      crossSize = axisCross(naturals[i], dir);
+    }
+    const crossFree = crossAvail - crossSize - 2 * c.margin;
+    const crossPos = crossOrigin + c.margin + alignOffset(align, crossFree);
+
+    const childRect = dir === "Row"
+      ? { x: cursor, y: crossPos, w: mainSize[i], h: crossSize }
+      : { x: crossPos, y: cursor, w: crossSize, h: mainSize[i] };
+    layoutNode(c, childRect);
+
+    cursor += mainSize[i] + c.margin;
+    if (i + 1 < count) cursor += gap + spacing;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Application state and UI                                            *
+ * ------------------------------------------------------------------ */
+
+function sampleTree() {
+  return makeNode("container", { dir: "Column", children: [
+    makeNode("container", { dir: "Row", height: 48, gap: 8, padding: 10,
+      align: "Center", children: [
+        makeNode("button", { text: "File", width: 56, height: 28 }),
+        makeNode("button", { text: "Edit", width: 56, height: 28 }),
+        makeNode("spacer", { grow: 1 }),
+        makeNode("button", { text: "Save", width: 72, height: 28 }),
+      ]}),
+    makeNode("container", { dir: "Row", grow: 1, children: [
+      makeNode("container", { dir: "Column", width: 160, padding: 12, gap: 6,
+        children: [
+          makeNode("text", { text: "Home", height: 20 }),
+          makeNode("text", { text: "Projects", height: 20 }),
+          makeNode("text", { text: "Settings", height: 20 }),
+          makeNode("spacer", { grow: 1 }),
+          makeNode("text", { text: "Account", height: 20 }),
+        ]}),
+      makeNode("container", { dir: "Column", grow: 1, padding: 16, gap: 12,
+        children: [
+          makeNode("text", { text: "Welcome to Loom", height: 24 }),
+          makeNode("box", { grow: 1 }),
+          makeNode("container", { dir: "Row", height: 36, gap: 8, justify: "End",
+            children: [
+              makeNode("button", { text: "Cancel", width: 80, height: 36 }),
+              makeNode("button", { text: "Confirm", width: 80, height: 36 }),
+            ]}),
+        ]}),
+    ]}),
+  ]});
+}
+
+let tree = sampleTree();
+let selectedId = 0;
+let availW = 800;
+let availH = 520;
+
+function findById(n, id) {
+  if (n.id === id) return n;
+  for (const c of n.children) { const r = findById(c, id); if (r) return r; }
+  return null;
+}
+function findParent(n, id, parent) {
+  if (n.id === id) return parent;
+  for (const c of n.children) { const r = findParent(c, id, n); if (r !== undefined) return r; }
+  return undefined;
+}
+
+const $ = sel => document.querySelector(sel);
+
+function relayoutAndRender() {
+  assignIds(tree);
+  if (findById(tree, selectedId) == null) selectedId = 0;
+  computeLayout(tree, availW, availH);
+  renderStage();
+  renderTree();
+  renderInspector();
+}
+
+function kindColorClass(n) { return isContainer(n) ? "" : "leaf"; }
+
+function renderStage() {
+  const stage = $("#stage");
+  stage.style.width = availW + "px";
+  stage.style.height = availH + "px";
+  stage.innerHTML = "";
+  (function draw(n) {
+    const el = document.createElement("div");
+    el.className = "box " + kindColorClass(n) + (n.id === selectedId ? " selected" : "");
+    el.style.left = n.rect.x + "px";
+    el.style.top = n.rect.y + "px";
+    el.style.width = n.rect.w + "px";
+    el.style.height = n.rect.h + "px";
+    el.title = "#" + n.id + " " + n.kind;
+    const label = n.kind === "text" || n.kind === "button"
+      ? n.kind + " " + JSON.stringify(n.text) : n.kind;
+    const tag = document.createElement("div");
+    tag.className = "tag";
+    tag.innerHTML = "<b>#" + n.id + "</b> " + label + "<br>" +
+      round(n.rect.x) + ", " + round(n.rect.y) + " &nbsp; " +
+      round(n.rect.w) + " &times; " + round(n.rect.h);
+    el.appendChild(tag);
+    el.addEventListener("click", ev => { ev.stopPropagation(); selectedId = n.id; relayoutAndRender(); });
+    stage.appendChild(el);
+    n.children.forEach(draw);
+  })(tree);
+}
+
+function round(v) { return Math.round(v * 10) / 10; }
+
+function renderTree() {
+  const root = $("#tree");
+  root.innerHTML = "";
+  root.appendChild(treeItem(tree));
+}
+function treeItem(n) {
+  const li = document.createElement("li");
+  const row = document.createElement("span");
+  row.className = "treerow" + (n.id === selectedId ? " selected" : "");
+  const label = n.kind === "text" || n.kind === "button"
+    ? n.kind + " " + JSON.stringify(n.text)
+    : (isContainer(n) ? "container " + n.dir : n.kind);
+  row.innerHTML = "<span class='rid'>#" + n.id + "</span> <span class='rk'>" + label + "</span>";
+  row.addEventListener("click", () => { selectedId = n.id; relayoutAndRender(); });
+  li.appendChild(row);
+  if (n.children.length) {
+    const ul = document.createElement("ul");
+    n.children.forEach(c => ul.appendChild(treeItem(c)));
+    li.appendChild(ul);
+  }
+  return li;
+}
+
+function renderInspector() {
+  const n = findById(tree, selectedId) || tree;
+  const container = isContainer(n);
+  $("#sel-info").innerHTML = "Selected <span class='kbd'>#" + n.id + " " +
+    (container ? "container " + n.dir : n.kind) + "</span>";
+
+  $("#container-controls").style.display = container ? "block" : "none";
+  $("#add-note").textContent = container
+    ? "Adds inside this container."
+    : "Select a container to add children.";
+  document.querySelectorAll("[data-add]").forEach(b => { b.disabled = !container; });
+  $("#btn-delete").disabled = (n.id === tree.id);
+
+  if (container) {
+    $("#c-dir").value = n.dir;
+    $("#c-justify").value = n.justify;
+    $("#c-align").value = n.align;
+    $("#c-gap").value = n.gap;
+    $("#c-pad").value = n.padding;
+  }
+  $("#c-border").value = n.border;
+  $("#c-margin").value = n.margin;
+
+  setDim("#c-width", "#c-wauto", n.width);
+  setDim("#c-height", "#c-hauto", n.height);
+  $("#c-grow").value = n.grow;
+  $("#c-shrink").value = n.shrink;
+}
+
+function setDim(inputSel, autoSel, value) {
+  const auto = value == null;
+  $(autoSel).checked = auto;
+  $(inputSel).disabled = auto;
+  $(inputSel).value = auto ? "" : value;
+}
+
+function sel() { return findById(tree, selectedId) || tree; }
+function num(v, fallback) { const x = parseFloat(v); return isFinite(x) && x >= 0 ? x : fallback; }
+
+function bindNumber(inputSel, apply) {
+  $(inputSel).addEventListener("input", () => { apply(sel(), num($(inputSel).value, 0)); relayoutAndRender(); });
+}
+function bindSelect(inputSel, key) {
+  $(inputSel).addEventListener("change", () => { sel()[key] = $(inputSel).value; relayoutAndRender(); });
+}
+
+bindSelect("#c-dir", "dir");
+bindSelect("#c-justify", "justify");
+bindSelect("#c-align", "align");
+bindNumber("#c-gap", (n, v) => n.gap = v);
+bindNumber("#c-pad", (n, v) => n.padding = v);
+bindNumber("#c-border", (n, v) => n.border = v);
+bindNumber("#c-margin", (n, v) => n.margin = v);
+bindNumber("#c-grow", (n, v) => n.grow = v);
+bindNumber("#c-shrink", (n, v) => n.shrink = v);
+
+function bindDim(inputSel, autoSel, key) {
+  $(autoSel).addEventListener("change", () => {
+    const n = sel();
+    n[key] = $(autoSel).checked ? null : num($(inputSel).value, 100);
+    relayoutAndRender();
+  });
+  $(inputSel).addEventListener("input", () => {
+    const n = sel();
+    if (!$(autoSel).checked) n[key] = num($(inputSel).value, 0);
+    relayoutAndRender();
+  });
+}
+bindDim("#c-width", "#c-wauto", "width");
+bindDim("#c-height", "#c-hauto", "height");
+
+document.querySelectorAll("[data-add]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const parent = sel();
+    if (!isContainer(parent)) return;
+    const kind = btn.getAttribute("data-add");
+    let child;
+    if (kind === "row") child = makeNode("container", { dir: "Row", grow: 1, padding: 6 });
+    else if (kind === "column") child = makeNode("container", { dir: "Column", grow: 1, padding: 6 });
+    else if (kind === "text") child = makeNode("text", { text: "Text", height: 20 });
+    else if (kind === "button") child = makeNode("button", { text: "Button", width: 90, height: 30 });
+    else if (kind === "box") child = makeNode("box", { grow: 1 });
+    else child = makeNode("spacer", { grow: 1 });
+    parent.children.push(child);
+    relayoutAndRender();
+  });
+});
+
+$("#btn-delete").addEventListener("click", () => {
+  if (selectedId === tree.id) return;
+  const parent = findParent(tree, selectedId, null);
+  if (!parent) return;
+  parent.children = parent.children.filter(c => c.id !== selectedId);
+  selectedId = parent.id;
+  relayoutAndRender();
+});
+
+$("#btn-reset").addEventListener("click", () => {
+  tree = sampleTree();
+  selectedId = 0;
+  relayoutAndRender();
+});
+
+$("#size-w").addEventListener("input", e => {
+  availW = parseInt(e.target.value, 10);
+  $("#lbl-w").textContent = availW;
+  relayoutAndRender();
+});
+$("#size-h").addEventListener("input", e => {
+  availH = parseInt(e.target.value, 10);
+  $("#lbl-h").textContent = availH;
+  relayoutAndRender();
+});
+
+$("#stage").addEventListener("click", () => { selectedId = tree.id; relayoutAndRender(); });
+
+relayoutAndRender();
+</script>
 </body>
 </html>
