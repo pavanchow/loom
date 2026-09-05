@@ -1,0 +1,18 @@
+[package]
+name = "loom"
+version = "0.1.0"
+edition = "2021"
+description = "A dependency-free retained-mode GUI layout engine with a flexbox-style constraint solver."
+license = "MIT"
+repository = "https://github.com/pavanchow/loom"
+
+[lib]
+name = "loom"
+path = "src/lib.rs"
+
+[[bin]]
+name = "loom"
+path = "src/bin/loom.rs"
+
+[profile.release]
+opt-level = 3
