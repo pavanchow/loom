@@ -39,6 +39,25 @@ impl Rng {
         let t = (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64;
         lo + t * (hi - lo)
     }
+
+    // A varied shrink factor. Zero appears often so that main axis overflow is
+    // deliberately left unresolved and the containment behaviour is exercised.
+    fn shrink_factor(&mut self) -> f64 {
+        match self.below(4) {
+            0 | 1 => 0.0,
+            2 => 1.0,
+            _ => self.range_f64(0.0, 2.0),
+        }
+    }
+
+    fn align(&mut self) -> Align {
+        match self.below(4) {
+            0 => Align::Start,
+            1 => Align::Center,
+            2 => Align::End,
+            _ => Align::Stretch,
+        }
+    }
 }
 
 fn env_u64(name: &str, fallback: u64) -> u64 {
@@ -49,9 +68,11 @@ fn env_u64(name: &str, fallback: u64) -> u64 {
 }
 
 // Builds a random tree. Containers appear only above `leaf_depth`; the deepest
-// level is always leaves. Every child uses flex shrink so main axis overflow
-// always resolves to fit, and align stretch so the cross axis fits too. These
-// choices keep the containment invariant well defined without faking anything.
+// level is always leaves. Children use varied flex shrink factors, including
+// zero, and varied align values, so both axes are regularly driven into
+// intentional overflow. The containment check is written to assert the
+// documented overflow semantics on the overflowing axis rather than to assume
+// everything always fits.
 fn random_node(rng: &mut Rng, depth: u32, max_depth: u32) -> Node {
     let make_leaf = depth >= max_depth || rng.below(3) == 0;
     if make_leaf {
@@ -61,7 +82,7 @@ fn random_node(rng: &mut Rng, depth: u32, max_depth: u32) -> Node {
             2 => Node::boxed(),
             _ => Node::spacer(),
         };
-        n = n.grow(rng.range_f64(0.0, 2.0)).shrink(1.0);
+        n = n.grow(rng.range_f64(0.0, 2.0)).shrink(rng.shrink_factor());
         n = n.margin(EdgeInsets::all(rng.range_f64(0.0, 4.0)));
         return n;
     }
@@ -79,13 +100,14 @@ fn random_node(rng: &mut Rng, depth: u32, max_depth: u32) -> Node {
     };
 
     let count = 1 + rng.below(4) as usize;
+    let align = rng.align();
     let mut node = Node::container(dir)
         .justify(justify)
-        .align(Align::Stretch)
+        .align(align)
         .gap(rng.range_f64(0.0, 8.0))
         .padding(EdgeInsets::all(rng.range_f64(0.0, 10.0)))
         .grow(rng.range_f64(0.0, 2.0))
-        .shrink(1.0)
+        .shrink(rng.shrink_factor())
         .margin(EdgeInsets::all(rng.range_f64(0.0, 4.0)));
 
     for _ in 0..count {
@@ -105,6 +127,80 @@ fn content_box(node: &Node) -> Rect {
     )
 }
 
+fn axis_main(s: Size, dir: Direction) -> f64 {
+    match dir {
+        Direction::Row => s.w,
+        Direction::Column => s.h,
+    }
+}
+
+fn axis_cross(s: Size, dir: Direction) -> f64 {
+    match dir {
+        Direction::Row => s.h,
+        Direction::Column => s.w,
+    }
+}
+
+fn child_base_main(child: &Node, dir: Direction) -> f64 {
+    match child.style.main_dim(dir) {
+        Dimension::Points(v) => v.max(0.0),
+        Dimension::Auto => axis_main(natural_size(child), dir),
+    }
+}
+
+// Whether the children overflow the parent content box along the main axis.
+// The solver shrinks flexible children to fit whenever it can, collapsing each
+// down to at most zero. So the smallest total main extent the children can take
+// is the sum of the bases of the children that cannot shrink, plus their margins
+// and the gaps. Overflow is unavoidable, and therefore documented and allowed,
+// exactly when even that minimum exceeds the content main length.
+fn main_axis_overflows(node: &Node, cbox: &Rect) -> bool {
+    let dir = node.style.direction;
+    let n = node.children.len();
+    if n == 0 {
+        return false;
+    }
+    let main_avail = axis_main(Size::new(cbox.w, cbox.h), dir);
+    let total_gap = if n > 1 {
+        node.style.gap * (n as f64 - 1.0)
+    } else {
+        0.0
+    };
+    let mut min_base = 0.0;
+    let mut margin_sum = 0.0;
+    for child in &node.children {
+        if child.style.flex_shrink <= 0.0 {
+            min_base += child_base_main(child, dir);
+        }
+        margin_sum += child.style.margin.main_total(dir);
+    }
+    min_base + margin_sum + total_gap > main_avail + 1e-4
+}
+
+// Whether a single child overflows the parent content box along the cross axis.
+// A stretched child is clamped to the content box, so this only happens when the
+// align is not stretch and the child intrinsic cross size exceeds what is left.
+fn cross_axis_overflows(node: &Node, child: &Node, cbox: &Rect) -> bool {
+    let dir = node.style.direction;
+    let cross_avail = axis_cross(Size::new(cbox.w, cbox.h), dir);
+    let margin = child.style.margin.cross_total(dir);
+    let cross_size = match child.style.cross_dim(dir) {
+        Dimension::Points(v) => v.max(0.0),
+        Dimension::Auto => {
+            if node.style.align == Align::Stretch {
+                (cross_avail - margin).max(0.0)
+            } else {
+                axis_cross(natural_size(child), dir)
+            }
+        }
+    };
+    cross_size + margin > cross_avail + EPS
+}
+
+fn contained_on(near: f64, far: f64, lo: f64, hi: f64) -> bool {
+    near >= lo - 1e-4 && far <= hi + 1e-4
+}
+
 fn check_node(node: &Node) {
     // No negative sizes anywhere.
     assert!(
@@ -115,17 +211,73 @@ fn check_node(node: &Node) {
     );
 
     let cbox = content_box(node);
+    let dir = node.style.direction;
+    let main_overflow = main_axis_overflows(node, &cbox);
 
-    // Every child border box lies within the parent content box.
+    // Containment is asserted per axis. On an axis that is not overflowing the
+    // child border box lies fully within the parent content box, which is the
+    // core promise of nesting. On the main axis under documented overflow the
+    // child still begins at or after the content origin and only extends past
+    // the far edge (the solver never places it before the origin). On the cross
+    // axis under documented overflow a non stretch align may push the child past
+    // either edge, so containment is not asserted there.
     for child in &node.children {
-        assert!(
-            cbox.contains_rect(&child.rect, 1e-4),
-            "child #{} {:?} escapes parent #{} content {:?}",
-            child.id,
-            child.rect,
-            node.id,
-            cbox
-        );
+        let r = &child.rect;
+        let cross_overflow = cross_axis_overflows(node, child, &cbox);
+        let (main_near, main_far, main_lo, main_hi, cross_near, cross_far, cross_lo, cross_hi) =
+            match dir {
+                Direction::Row => (
+                    r.x,
+                    r.right(),
+                    cbox.x,
+                    cbox.right(),
+                    r.y,
+                    r.bottom(),
+                    cbox.y,
+                    cbox.bottom(),
+                ),
+                Direction::Column => (
+                    r.y,
+                    r.bottom(),
+                    cbox.y,
+                    cbox.bottom(),
+                    r.x,
+                    r.right(),
+                    cbox.x,
+                    cbox.right(),
+                ),
+            };
+
+        if main_overflow {
+            assert!(
+                main_near >= main_lo - 1e-4,
+                "child #{} {:?} placed before parent #{} content origin {:?} under main overflow",
+                child.id,
+                r,
+                node.id,
+                cbox
+            );
+        } else {
+            assert!(
+                contained_on(main_near, main_far, main_lo, main_hi),
+                "child #{} {:?} escapes parent #{} content {:?} on main axis",
+                child.id,
+                r,
+                node.id,
+                cbox
+            );
+        }
+
+        if !cross_overflow {
+            assert!(
+                contained_on(cross_near, cross_far, cross_lo, cross_hi),
+                "child #{} {:?} escapes parent #{} content {:?} on cross axis",
+                child.id,
+                r,
+                node.id,
+                cbox
+            );
+        }
     }
 
     // Siblings in normal flow never overlap.

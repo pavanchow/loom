@@ -163,16 +163,46 @@ fn arrange_children(node: &mut Node) {
             }
         }
     } else if free < 0.0 {
-        let total_scaled: f64 = shrink
-            .iter()
-            .zip(base.iter())
-            .map(|(s, b)| s * b)
-            .sum();
-        if total_scaled > 0.0 {
-            for (ms, (s, b)) in main_size.iter_mut().zip(shrink.iter().zip(base.iter())) {
-                let reduce = (-free) * (s * b) / total_scaled;
-                *ms = (*b - reduce).max(0.0);
+        // Resolve shrink iteratively. A single proportional pass loses part of
+        // the reduction whenever a child would shrink below zero and clamps,
+        // which leaves the row overflowing even though other children still had
+        // room. Freezing clamped children and redistributing the remaining
+        // deficit among the rest makes the children collapse to fit exactly
+        // whenever that is geometrically possible.
+        let mut remaining = -free;
+        let mut frozen = vec![false; main_size.len()];
+        loop {
+            let scaled: f64 = (0..main_size.len())
+                .filter(|&i| !frozen[i] && shrink[i] > 0.0)
+                .map(|i| shrink[i] * base[i])
+                .sum();
+            if scaled <= 0.0 || remaining <= 1e-9 {
+                break;
             }
+            let mut froze_any = false;
+            for i in 0..main_size.len() {
+                if frozen[i] || shrink[i] <= 0.0 {
+                    continue;
+                }
+                let reduce = remaining * (shrink[i] * base[i]) / scaled;
+                if reduce >= main_size[i] {
+                    remaining -= main_size[i];
+                    main_size[i] = 0.0;
+                    frozen[i] = true;
+                    froze_any = true;
+                }
+            }
+            if froze_any {
+                continue;
+            }
+            for i in 0..main_size.len() {
+                if frozen[i] || shrink[i] <= 0.0 {
+                    continue;
+                }
+                let reduce = remaining * (shrink[i] * base[i]) / scaled;
+                main_size[i] = (main_size[i] - reduce).max(0.0);
+            }
+            break;
         }
     }
 
