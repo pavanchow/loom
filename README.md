@@ -47,6 +47,7 @@ cargo run -- demo         # also print draw calls and a hit test probe
 Build a tree with `Node`. Every widget is one of `Container`, `Text`, `Button`, `Box`, or `Spacer`. Containers are made with `Node::row()` or `Node::column()` and configured with a fluent builder.
 
 - Sizing: `.width(px)`, `.height(px)`, or leave a dimension automatic so it is derived from content.
+- Clamps: `.min_width(px)`, `.max_width(px)`, `.min_height(px)`, `.max_height(px)` bound the resolved size on each axis. An unset bound means no limit, and when a minimum exceeds a maximum the minimum wins.
 - Flex: `.grow(f)` distributes leftover main axis space, `.shrink(f)` absorbs overflow.
 - Spacing: `.gap(px)`, `.padding(insets)`, `.border(insets)`, `.margin(insets)`.
 - Alignment: `.justify(Justify::...)` on the main axis, `.align(Align::...)` on the cross axis.
@@ -61,15 +62,18 @@ Then run the pipeline.
 
 The box model. A `rect` is the border box, which includes border and padding but excludes margin. Fixed `width` and `height` set the border box size. Content lives inside border plus padding.
 
+Non-finite input rejection. Any NaN or infinity handed to a style value or to the available size is normalized before the solver runs, so a bad number can never poison a computed rectangle. A non-finite scalar such as a gap or a margin becomes zero, and a non-finite fixed length degrades to automatic so the node falls back to content or fill sizing. Every coordinate the engine produces is finite.
+
 ## The correctness gate
 
 The claim that this engine is correct is backed by tests that run on every build.
 
-1. Golden layout. Several known trees laid out at known sizes must produce exact, hand computed rectangles. These cover row, column, nesting, flex grow distribution, weighted grow, padding, margin, gap, and justify plus align. See `tests/golden.rs`.
-2. Invariants over random trees, including wrap-on trees whose leaves always fit their lines. For hundreds of randomly generated trees, every child rectangle must lie inside its parent content box, sibling rectangles must never overlap, no width or height may be negative, and equal flex children must fill the parent main axis within one pixel of rounding. See `tests/invariants.rs`.
+1. Golden layout. Several known trees laid out at known sizes must produce exact, hand computed rectangles. These cover row, column, nesting, flex grow distribution, weighted grow, padding, margin, gap, justify plus align, wrapping, and the min and max size clamps. See `tests/golden.rs`.
+2. Invariants over random trees, including wrap-on trees whose leaves always fit their lines and clamp trees with random min and max bounds. The random trees deliberately feed degenerate, huge, fractional, and non-finite sizes so both axes are driven into extremes. For every generated tree, no coordinate may be non-finite, every child rectangle must lie inside its parent content box on any axis that fits, sibling rectangles must never overlap, no width or height may be negative, equal flex children must fill the parent main axis within one pixel of rounding, and every clamped child must land inside its own bounds. See `tests/invariants.rs`.
 3. Determinism. The same tree at the same size must produce identical rectangles on every run. See `tests/invariants.rs`.
+4. The checker checks itself. A unit test corrupts a good layout in four ways, a child that escapes the content box, a non-finite coordinate, and overlapping siblings, and asserts the invariant checker rejects each one, so a passing gate cannot be a blind gate. See `tests/invariants.rs`.
 
-Plus unit tests per module for the box model math, flex distribution, and hit testing. The fuzz iteration count is bounded for CI and controlled by `LOOM_FUZZ_OPS`, with the seed set by `LOOM_FUZZ_SEED`.
+Plus unit tests per module for the box model math, flex distribution, and hit testing. The fuzz iteration count is bounded for CI and controlled by `LOOM_FUZZ_OPS`, with the seed set by `LOOM_FUZZ_SEED` given as a decimal number.
 
 ```
 cargo test
