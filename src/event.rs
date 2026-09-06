@@ -9,6 +9,7 @@ use crate::widget::Node;
 /// Returns the id of the deepest node containing the point, or `None` when the
 /// point falls outside the root. The last matching child in document order wins
 /// among overlapping siblings, matching paint order.
+#[must_use]
 pub fn hit_test(root: &Node, px: f64, py: f64) -> Option<usize> {
     if !root.rect.contains(px, py) {
         return None;
@@ -24,6 +25,7 @@ pub fn hit_test(root: &Node, px: f64, py: f64) -> Option<usize> {
 
 /// Returns the full path of node ids from the root down to the deepest hit.
 /// Useful for event bubbling. Empty when the point is outside the root.
+#[must_use]
 pub fn hit_path(root: &Node, px: f64, py: f64) -> Vec<usize> {
     let mut path = Vec::new();
     collect_path(root, px, py, &mut path);

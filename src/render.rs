@@ -30,6 +30,7 @@ pub struct RecordingRenderer {
 }
 
 impl RecordingRenderer {
+    #[must_use]
     pub fn new() -> RecordingRenderer {
         RecordingRenderer { calls: Vec::new() }
     }
@@ -100,11 +101,11 @@ mod tests {
         assert_eq!(rec.calls.len(), 4);
         match &rec.calls[0] {
             DrawCall::Rect { kind, .. } => assert_eq!(*kind, "container"),
-            _ => panic!("expected container rect first"),
+            DrawCall::Text { .. } => panic!("expected container rect first"),
         }
         match &rec.calls[3] {
             DrawCall::Text { text, .. } => assert_eq!(text, "hi"),
-            _ => panic!("expected text call last"),
+            DrawCall::Rect { .. } => panic!("expected text call last"),
         }
     }
 }
