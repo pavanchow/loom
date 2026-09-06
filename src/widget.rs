@@ -1,7 +1,7 @@
 //! The retained mode widget tree.
 
 use crate::geometry::{Rect, Size};
-use crate::style::{Align, Dimension, Direction, EdgeInsets, Justify, Style};
+use crate::style::{Align, Dimension, Direction, EdgeInsets, FlexWrap, Justify, Style};
 
 /// Width of a single character used to measure text intrinsic size.
 pub const CHAR_W: f64 = 8.0;
@@ -19,7 +19,7 @@ pub enum WidgetKind {
     Button(String),
     /// A plain rectangle with no intrinsic content size.
     Box,
-    /// An empty flexible gap, typically given flex_grow to push siblings apart.
+    /// An empty flexible gap, typically given `flex_grow` to push siblings apart.
     Spacer,
 }
 
@@ -36,6 +36,7 @@ pub struct Node {
 }
 
 impl Node {
+    #[must_use]
     pub fn new(kind: WidgetKind) -> Node {
         Node {
             id: 0,
@@ -46,32 +47,39 @@ impl Node {
         }
     }
 
+    #[must_use]
     pub fn container(direction: Direction) -> Node {
         let mut n = Node::new(WidgetKind::Container);
         n.style.direction = direction;
         n
     }
 
+    #[must_use]
     pub fn row() -> Node {
         Node::container(Direction::Row)
     }
 
+    #[must_use]
     pub fn column() -> Node {
         Node::container(Direction::Column)
     }
 
+    #[must_use]
     pub fn text(s: &str) -> Node {
         Node::new(WidgetKind::Text(s.to_string()))
     }
 
+    #[must_use]
     pub fn button(s: &str) -> Node {
         Node::new(WidgetKind::Button(s.to_string()))
     }
 
+    #[must_use]
     pub fn boxed() -> Node {
         Node::new(WidgetKind::Box)
     }
 
+    #[must_use]
     pub fn spacer() -> Node {
         Node::new(WidgetKind::Spacer)
     }
@@ -79,38 +87,53 @@ impl Node {
     // Builder style setters. These consume and return self so trees can be
     // written declaratively.
 
+    #[must_use]
     pub fn with_style(mut self, style: Style) -> Node {
         self.style = style;
         self
     }
 
+    #[must_use]
     pub fn width(mut self, v: f64) -> Node {
         self.style.width = Dimension::Points(v);
         self
     }
 
+    #[must_use]
     pub fn height(mut self, v: f64) -> Node {
         self.style.height = Dimension::Points(v);
         self
     }
 
+    #[must_use]
     pub fn grow(mut self, v: f64) -> Node {
         self.style.flex_grow = v;
         self
     }
 
+    #[must_use]
     pub fn shrink(mut self, v: f64) -> Node {
         self.style.flex_shrink = v;
         self
     }
 
+    #[must_use]
     pub fn gap(mut self, v: f64) -> Node {
         self.style.gap = v;
         self
     }
 
+    #[must_use]
     pub fn justify(mut self, v: Justify) -> Node {
         self.style.justify = v;
+        self
+    }
+
+    #[must_use]
+    /// Enable wrapping so children break onto new lines when the line is full.
+    #[must_use]
+    pub fn wrap(mut self) -> Node {
+        self.style.flex_wrap = FlexWrap::Wrap;
         self
     }
 
@@ -119,31 +142,37 @@ impl Node {
         self
     }
 
+    #[must_use]
     pub fn padding(mut self, v: EdgeInsets) -> Node {
         self.style.padding = v;
         self
     }
 
+    #[must_use]
     pub fn border(mut self, v: EdgeInsets) -> Node {
         self.style.border = v;
         self
     }
 
+    #[must_use]
     pub fn margin(mut self, v: EdgeInsets) -> Node {
         self.style.margin = v;
         self
     }
 
+    #[must_use]
     pub fn child(mut self, c: Node) -> Node {
         self.children.push(c);
         self
     }
 
+    #[must_use]
     pub fn children(mut self, cs: Vec<Node>) -> Node {
         self.children = cs;
         self
     }
 
+    #[must_use]
     pub fn is_container(&self) -> bool {
         matches!(self.kind, WidgetKind::Container)
     }
@@ -151,10 +180,13 @@ impl Node {
     /// The intrinsic content size of a leaf, before padding and border are
     /// added. Containers return zero here because their content size is derived
     /// from their children in `natural_size`.
+    #[must_use]
     pub fn leaf_content_size(&self) -> Size {
         match &self.kind {
             WidgetKind::Text(s) | WidgetKind::Button(s) => {
-                Size::new(s.chars().count() as f64 * CHAR_W, LINE_H)
+                #[allow(clippy::cast_precision_loss)] // text widths are character counts times a constant
+                let w = s.chars().count() as f64 * CHAR_W;
+                Size::new(w, LINE_H)
             }
             WidgetKind::Box | WidgetKind::Spacer | WidgetKind::Container => Size::ZERO,
         }
@@ -178,6 +210,8 @@ fn assign_ids_inner(node: &mut Node, next: &mut usize) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::float_cmp)] // asserted floats are literal constants assigned once
+
     use super::*;
 
     #[test]

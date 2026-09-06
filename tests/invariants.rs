@@ -1,8 +1,11 @@
+#![allow(clippy::float_cmp)] // asserted floats are literal constants or exact by construction
+#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)] // rng ranges and pixel scales are tiny
+
 //! Structural invariants checked over many randomly generated trees, plus
 //! determinism and flex fill gates.
 //!
-//! The iteration count is bounded for CI and controllable with the LOOM_FUZZ_OPS
-//! environment variable. The starting seed can be set with LOOM_FUZZ_SEED.
+//! The iteration count is bounded for CI and controllable with the `LOOM_FUZZ_OPS`
+//! environment variable. The starting seed can be set with `LOOM_FUZZ_SEED`.
 
 use loom::prelude::*;
 use loom::style::Style;
@@ -378,4 +381,46 @@ fn style_default_is_sane() {
     let s = Style::default();
     assert_eq!(s.flex_grow, 0.0);
     assert_eq!(s.direction, Direction::Row);
+}
+
+#[test]
+fn wrapped_trees_contain_children_on_the_main_axis() {
+    // Wrap containers whose leaves always fit the main axis must place every
+    // child inside the parent content box along the main axis, start children
+    // at or after the content origin along the cross axis, and produce
+    // non-negative sizes. Determinism is checked by recomputation.
+    let ops = env_u64("LOOM_FUZZ_OPS", 300).max(50);
+    for seed in 0..ops {
+        let mut rng = Rng::new(0x5EED_0000 + seed);
+        let mut root = Node::container(Direction::Row)
+            .width(200.0)
+            .height(200.0)
+            .wrap()
+            .gap(rng.range_f64(0.0, 10.0));
+        let count = 1 + rng.below(12) as usize;
+        for _ in 0..count {
+            let w = 20.0 + rng.range_f64(0.0, 40.0);
+            let h = 20.0 + rng.range_f64(0.0, 40.0);
+            root = root.child(Node::boxed().width(w).height(h));
+        }
+        let snap = root.clone();
+        compute_layout(&mut root, Size::new(200.0, 200.0));
+        let inner = root.style.inner();
+        for child in &root.children {
+            assert!(
+                child.rect.x >= inner.left - 1e-9
+                    && child.rect.x + child.rect.w <= 200.0 - inner.right + 1e-9,
+                "seed {seed}: wrapped child escapes the main axis: {:?} in 200 wide",
+                child.rect
+            );
+            assert!(child.rect.y >= inner.top - 1e-9, "seed {seed}: cross start before content origin");
+            assert!(child.rect.w >= 0.0 && child.rect.h >= 0.0, "seed {seed}: negative size");
+        }
+        // Determinism: the identical tree computes identical rects.
+        let mut again = snap;
+        compute_layout(&mut again, Size::new(200.0, 200.0));
+        for (a, b) in root.children.iter().zip(again.children.iter()) {
+            assert_eq!(a.rect, b.rect, "seed {seed}: wrap layout nondeterministic");
+        }
+    }
 }

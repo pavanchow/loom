@@ -18,6 +18,16 @@ pub enum Justify {
     SpaceBetween,
 }
 
+/// Whether children wrap onto new lines when they exceed the main axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FlexWrap {
+    /// One line, overflowing if the children cannot shrink to fit.
+    #[default]
+    NoWrap,
+    /// Children break onto new lines so each line's main sizes fit.
+    Wrap,
+}
+
 /// Alignment of a child along the cross axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Align {
@@ -38,10 +48,12 @@ pub enum Dimension {
 }
 
 impl Dimension {
+    #[must_use]
     pub fn is_fixed(&self) -> bool {
         matches!(self, Dimension::Points(_))
     }
 
+    #[must_use]
     pub fn resolve_or(&self, fallback: f64) -> f64 {
         match self {
             Dimension::Auto => fallback,
@@ -67,6 +79,7 @@ impl EdgeInsets {
         left: 0.0,
     };
 
+    #[must_use]
     pub fn all(v: f64) -> EdgeInsets {
         EdgeInsets {
             top: v,
@@ -76,6 +89,7 @@ impl EdgeInsets {
         }
     }
 
+    #[must_use]
     pub fn symmetric(vertical: f64, horizontal: f64) -> EdgeInsets {
         EdgeInsets {
             top: vertical,
@@ -85,15 +99,18 @@ impl EdgeInsets {
         }
     }
 
+    #[must_use]
     pub fn horizontal(&self) -> f64 {
         self.left + self.right
     }
 
+    #[must_use]
     pub fn vertical(&self) -> f64 {
         self.top + self.bottom
     }
 
     /// The inset at the start of the main axis for the given direction.
+    #[must_use]
     pub fn main_start(&self, dir: Direction) -> f64 {
         match dir {
             Direction::Row => self.left,
@@ -102,6 +119,7 @@ impl EdgeInsets {
     }
 
     /// The inset at the end of the main axis for the given direction.
+    #[must_use]
     pub fn main_end(&self, dir: Direction) -> f64 {
         match dir {
             Direction::Row => self.right,
@@ -110,6 +128,7 @@ impl EdgeInsets {
     }
 
     /// The inset at the start of the cross axis for the given direction.
+    #[must_use]
     pub fn cross_start(&self, dir: Direction) -> f64 {
         match dir {
             Direction::Row => self.top,
@@ -118,6 +137,7 @@ impl EdgeInsets {
     }
 
     /// The inset at the end of the cross axis for the given direction.
+    #[must_use]
     pub fn cross_end(&self, dir: Direction) -> f64 {
         match dir {
             Direction::Row => self.bottom,
@@ -125,10 +145,12 @@ impl EdgeInsets {
         }
     }
 
+    #[must_use]
     pub fn main_total(&self, dir: Direction) -> f64 {
         self.main_start(dir) + self.main_end(dir)
     }
 
+    #[must_use]
     pub fn cross_total(&self, dir: Direction) -> f64 {
         self.cross_start(dir) + self.cross_end(dir)
     }
@@ -139,6 +161,7 @@ impl EdgeInsets {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Style {
     pub direction: Direction,
+    pub flex_wrap: FlexWrap,
     pub justify: Justify,
     pub align: Align,
     pub gap: f64,
@@ -155,6 +178,7 @@ impl Default for Style {
     fn default() -> Style {
         Style {
             direction: Direction::Row,
+            flex_wrap: FlexWrap::NoWrap,
             justify: Justify::Start,
             align: Align::Stretch,
             gap: 0.0,
@@ -171,6 +195,7 @@ impl Default for Style {
 
 impl Style {
     /// The main axis fixed length for the given direction, if any.
+    #[must_use]
     pub fn main_dim(&self, dir: Direction) -> Dimension {
         match dir {
             Direction::Row => self.width,
@@ -179,6 +204,7 @@ impl Style {
     }
 
     /// The cross axis fixed length for the given direction, if any.
+    #[must_use]
     pub fn cross_dim(&self, dir: Direction) -> Dimension {
         match dir {
             Direction::Row => self.height,
@@ -187,6 +213,7 @@ impl Style {
     }
 
     /// Combined border plus padding insets. Content sits inside these.
+    #[must_use]
     pub fn inner(&self) -> EdgeInsets {
         EdgeInsets {
             top: self.border.top + self.padding.top,
@@ -199,6 +226,8 @@ impl Style {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::float_cmp)] // asserted floats are literal constants assigned once
+
     use super::*;
 
     #[test]

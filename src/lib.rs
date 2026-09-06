@@ -37,14 +37,17 @@ pub mod prelude {
     pub use crate::geometry::{Point, Rect, Size};
     pub use crate::layout::{compute_layout, natural_size};
     pub use crate::render::{render, DrawCall, RecordingRenderer, Renderer};
-    pub use crate::style::{Align, Dimension, Direction, EdgeInsets, Justify, Style};
+    pub use crate::style::{Align, Dimension, Direction, EdgeInsets, FlexWrap, Justify, Style};
     pub use crate::widget::{assign_ids, Node, WidgetKind, CHAR_W, LINE_H};
 }
+
+use std::fmt::Write;
 
 use crate::widget::{Node, WidgetKind};
 
 /// Formats a laid out tree as an indented rectangle listing. Each line shows
 /// the node id, kind and its computed border box.
+#[must_use]
 pub fn format_tree(root: &Node) -> String {
     let mut out = String::new();
     format_node(root, 0, &mut out);
@@ -60,14 +63,15 @@ fn format_node(node: &Node, depth: usize, out: &mut String) {
         WidgetKind::Box => "Box".to_string(),
         WidgetKind::Spacer => "Spacer".to_string(),
     };
-    out.push_str(&format!(
-        "{indent}#{id} {label} x={x:.1} y={y:.1} w={w:.1} h={h:.1}\n",
+    let _ = writeln!(
+        out,
+        "{indent}#{id} {label} x={x:.1} y={y:.1} w={w:.1} h={h:.1}",
         id = node.id,
         x = node.rect.x,
         y = node.rect.y,
         w = node.rect.w,
         h = node.rect.h,
-    ));
+    );
     for child in &node.children {
         format_node(child, depth + 1, out);
     }
@@ -75,6 +79,7 @@ fn format_node(node: &Node, depth: usize, out: &mut String) {
 
 /// Builds a representative sample UI used by the CLI and the demo. It exercises
 /// nesting, flex grow, a spacer, gaps, padding and fixed sizes.
+#[must_use]
 pub fn sample_ui() -> Node {
     use crate::style::{Align, EdgeInsets, Justify};
 
