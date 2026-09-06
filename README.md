@@ -1,6 +1,6 @@
 # Loom
 
-Loom is a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node using a flexbox style constraint solver. It has no external crates, targets edition 2021, and the whole core is headless so it can be tested without a screen.
+Loom is a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node using a flexbox style constraint solver, with optional wrapping so children break onto new lines when a line fills up. It has no external crates, targets edition 2021, and the whole core is headless so it can be tested without a screen.
 
 Live playground: https://pavanchow.github.io/loom/
 
@@ -23,6 +23,7 @@ let mut root = Node::row()
     .width(200.0)
     .height(40.0)
     .gap(8.0)
+    .wrap()
     .child(Node::text("File").width(48.0))
     .child(Node::spacer().grow(1.0))
     .child(Node::button("Save").width(64.0));
@@ -65,7 +66,7 @@ The box model. A `rect` is the border box, which includes border and padding but
 The claim that this engine is correct is backed by tests that run on every build.
 
 1. Golden layout. Several known trees laid out at known sizes must produce exact, hand computed rectangles. These cover row, column, nesting, flex grow distribution, weighted grow, padding, margin, gap, and justify plus align. See `tests/golden.rs`.
-2. Invariants over random trees. For hundreds of randomly generated trees, every child rectangle must lie inside its parent content box, sibling rectangles must never overlap, no width or height may be negative, and equal flex children must fill the parent main axis within one pixel of rounding. See `tests/invariants.rs`.
+2. Invariants over random trees, including wrap-on trees whose leaves always fit their lines. For hundreds of randomly generated trees, every child rectangle must lie inside its parent content box, sibling rectangles must never overlap, no width or height may be negative, and equal flex children must fill the parent main axis within one pixel of rounding. See `tests/invariants.rs`.
 3. Determinism. The same tree at the same size must produce identical rectangles on every run. See `tests/invariants.rs`.
 
 Plus unit tests per module for the box model math, flex distribution, and hit testing. The fuzz iteration count is bounded for CI and controlled by `LOOM_FUZZ_OPS`, with the seed set by `LOOM_FUZZ_SEED`.
