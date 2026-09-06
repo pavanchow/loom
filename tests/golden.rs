@@ -147,6 +147,51 @@ fn golden_weighted_flex_grow() {
     assert_eq!(root.children[2].rect, Rect::new(40.0, 0.0, 60.0, 10.0));
 }
 
+// I: max_width caps a grower. The child would grow to fill the 100px row but its
+// maximum width of 30 clamps the used size, so it stays 30 wide at the origin.
+#[test]
+fn golden_max_width_caps_grower() {
+    let root = laid_out(
+        Node::row()
+            .width(100.0)
+            .height(20.0)
+            .child(Node::boxed().grow(1.0).max_width(30.0)),
+        100.0,
+        20.0,
+    );
+    assert_eq!(root.children[0].rect, Rect::new(0.0, 0.0, 30.0, 20.0));
+}
+
+// J: min_width floors a shrinking child. A 100px child under shrink would shrink
+// to fit the 50px row, but its 70px minimum floors it, so it overflows to 70.
+#[test]
+fn golden_min_width_floors_shrinker() {
+    let root = laid_out(
+        Node::row()
+            .width(50.0)
+            .height(20.0)
+            .child(Node::boxed().width(100.0).shrink(1.0).min_width(70.0)),
+        50.0,
+        20.0,
+    );
+    assert_eq!(root.children[0].rect, Rect::new(0.0, 0.0, 70.0, 20.0));
+}
+
+// K: max_height caps a cross axis stretch. The auto height child would stretch to
+// the 40px row, but its 10px maximum height clamps the cross size.
+#[test]
+fn golden_max_height_caps_cross_stretch() {
+    let root = laid_out(
+        Node::row()
+            .width(100.0)
+            .height(40.0)
+            .child(Node::boxed().width(20.0).max_height(10.0)),
+        100.0,
+        40.0,
+    );
+    assert_eq!(root.children[0].rect, Rect::new(0.0, 0.0, 20.0, 10.0));
+}
+
 // H: text intrinsic width drives an auto sized leaf. "OK" is two characters at
 // 8px each, so it is 16px wide, centered in a 100px row.
 #[test]

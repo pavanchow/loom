@@ -61,6 +61,26 @@ impl Rng {
             _ => Align::Stretch,
         }
     }
+
+    // A deliberately adversarial length: zero, a tiny fraction, an ordinary
+    // value, an enormous value, or a non-finite value. Non-finite lengths must
+    // be rejected at the layout boundary, so feeding them here proves the tree
+    // still produces finite, contained layouts.
+    fn degenerate_len(&mut self) -> f64 {
+        match self.below(6) {
+            0 => 0.0,
+            1 => self.range_f64(0.0, 1.0),
+            2 | 3 => self.range_f64(1.0, 120.0),
+            4 => self.range_f64(1e6, 1e9),
+            _ => {
+                if self.below(2) == 0 {
+                    f64::NAN
+                } else {
+                    f64::INFINITY
+                }
+            }
+        }
+    }
 }
 
 fn env_u64(name: &str, fallback: u64) -> u64 {
@@ -87,6 +107,14 @@ fn random_node(rng: &mut Rng, depth: u32, max_depth: u32) -> Node {
         };
         n = n.grow(rng.range_f64(0.0, 2.0)).shrink(rng.shrink_factor());
         n = n.margin(EdgeInsets::all(rng.range_f64(0.0, 4.0)));
+        // Occasionally pin degenerate fixed sizes, including non-finite ones, to
+        // drive both axes into extremes and exercise boundary rejection.
+        if rng.below(3) == 0 {
+            n = n.width(rng.degenerate_len());
+        }
+        if rng.below(3) == 0 {
+            n = n.height(rng.degenerate_len());
+        }
         return n;
     }
 
@@ -102,12 +130,18 @@ fn random_node(rng: &mut Rng, depth: u32, max_depth: u32) -> Node {
         _ => Justify::SpaceBetween,
     };
 
-    let count = 1 + rng.below(4) as usize;
+    let count = 1 + rng.below(6) as usize;
     let align = rng.align();
+    // A non-finite gap now and then proves gap sanitization holds under nesting.
+    let gap = if rng.below(8) == 0 {
+        f64::NAN
+    } else {
+        rng.range_f64(0.0, 8.0)
+    };
     let mut node = Node::container(dir)
         .justify(justify)
         .align(align)
-        .gap(rng.range_f64(0.0, 8.0))
+        .gap(gap)
         .padding(EdgeInsets::all(rng.range_f64(0.0, 10.0)))
         .grow(rng.range_f64(0.0, 2.0))
         .shrink(rng.shrink_factor())
@@ -144,11 +178,33 @@ fn axis_cross(s: Size, dir: Direction) -> f64 {
     }
 }
 
+fn resolved_lo(d: Dimension) -> f64 {
+    match d {
+        Dimension::Points(v) => v.max(0.0),
+        Dimension::Auto => 0.0,
+    }
+}
+
+fn resolved_hi(d: Dimension) -> f64 {
+    match d {
+        Dimension::Points(v) => v.max(0.0),
+        Dimension::Auto => f64::INFINITY,
+    }
+}
+
+// Mirrors the engine clamp: min wins when it exceeds max.
+fn clamp_axis(v: f64, min: Dimension, max: Dimension) -> f64 {
+    let lo = resolved_lo(min);
+    let hi = resolved_hi(max);
+    v.clamp(lo, lo.max(hi))
+}
+
 fn child_base_main(child: &Node, dir: Direction) -> f64 {
-    match child.style.main_dim(dir) {
+    let raw = match child.style.main_dim(dir) {
         Dimension::Points(v) => v.max(0.0),
         Dimension::Auto => axis_main(natural_size(child), dir),
-    }
+    };
+    clamp_axis(raw, child.style.min_main_dim(dir), child.style.max_main_dim(dir))
 }
 
 // Whether the children overflow the parent content box along the main axis.
@@ -205,6 +261,18 @@ fn contained_on(near: f64, far: f64, lo: f64, hi: f64) -> bool {
 }
 
 fn check_node(node: &Node) {
+    // Every coordinate is finite. Non-finite inputs are rejected at the layout
+    // boundary, so no NaN or infinity may ever reach a computed rectangle.
+    assert!(
+        node.rect.x.is_finite()
+            && node.rect.y.is_finite()
+            && node.rect.w.is_finite()
+            && node.rect.h.is_finite(),
+        "non-finite rect at #{}: {:?}",
+        node.id,
+        node.rect
+    );
+
     // No negative sizes anywhere.
     assert!(
         node.rect.w >= -EPS && node.rect.h >= -EPS,
@@ -310,7 +378,7 @@ fn invariants_hold_over_random_trees() {
     let mut rng = Rng::new(seed);
 
     for _ in 0..ops {
-        let mut root = random_node(&mut rng, 0, 3);
+        let mut root = random_node(&mut rng, 0, 4);
         assign_ids(&mut root);
         let w = rng.range_f64(400.0, 1000.0);
         let h = rng.range_f64(400.0, 1000.0);
@@ -330,8 +398,8 @@ fn layout_is_deterministic() {
         let w = rng.range_f64(400.0, 1000.0);
         let h = rng.range_f64(400.0, 1000.0);
 
-        let mut a = random_node(&mut Rng::new(sub), 0, 3);
-        let mut b = random_node(&mut Rng::new(sub), 0, 3);
+        let mut a = random_node(&mut Rng::new(sub), 0, 4);
+        let mut b = random_node(&mut Rng::new(sub), 0, 4);
         assign_ids(&mut a);
         assign_ids(&mut b);
         compute_layout(&mut a, Size::new(w, h));
@@ -423,4 +491,143 @@ fn wrapped_trees_contain_children_on_the_main_axis() {
             assert_eq!(a.rect, b.rect, "seed {seed}: wrap layout nondeterministic");
         }
     }
+}
+
+// Random min and max clamps on both axes. Every child's resolved main and cross
+// size must land inside its own bounds, the container being large enough that no
+// clamp forces overflow, so structural containment also holds.
+#[test]
+fn clamp_bounds_are_respected() {
+    let ops = env_u64("LOOM_FUZZ_OPS", 300).max(50);
+    for seed in 0..ops {
+        let mut rng = Rng::new(0xC1A_0000 + seed);
+        let dir = if rng.below(2) == 0 {
+            Direction::Row
+        } else {
+            Direction::Column
+        };
+        let mut root = Node::container(dir)
+            .width(600.0)
+            .height(600.0)
+            .gap(rng.range_f64(0.0, 6.0));
+        let count = 1 + rng.below(4) as usize;
+        for _ in 0..count {
+            let mut c = Node::boxed()
+                .width(rng.range_f64(10.0, 40.0))
+                .height(rng.range_f64(10.0, 40.0))
+                .grow(rng.range_f64(0.0, 1.0));
+            if rng.below(2) == 0 {
+                c = c.min_width(rng.range_f64(0.0, 30.0));
+            }
+            if rng.below(2) == 0 {
+                c = c.max_width(rng.range_f64(15.0, 80.0));
+            }
+            if rng.below(2) == 0 {
+                c = c.min_height(rng.range_f64(0.0, 30.0));
+            }
+            if rng.below(2) == 0 {
+                c = c.max_height(rng.range_f64(15.0, 80.0));
+            }
+            root = root.child(c);
+        }
+        assign_ids(&mut root);
+        compute_layout(&mut root, Size::new(600.0, 600.0));
+
+        for child in &root.children {
+            let main = axis_main(Size::new(child.rect.w, child.rect.h), dir);
+            let cross = axis_cross(Size::new(child.rect.w, child.rect.h), dir);
+            let main_lo = resolved_lo(child.style.min_main_dim(dir));
+            let main_hi = main_lo.max(resolved_hi(child.style.max_main_dim(dir)));
+            let cross_lo = resolved_lo(child.style.min_cross_dim(dir));
+            let cross_hi = cross_lo.max(resolved_hi(child.style.max_cross_dim(dir)));
+            assert!(
+                main >= main_lo - 1e-4 && main <= main_hi + 1e-4,
+                "seed {seed}: main size {main} outside [{main_lo}, {main_hi}]"
+            );
+            assert!(
+                cross >= cross_lo - 1e-4 && cross <= cross_hi + 1e-4,
+                "seed {seed}: cross size {cross} outside [{cross_lo}, {cross_hi}]"
+            );
+        }
+        check_node(&root);
+    }
+}
+
+// Non-finite inputs on gap, sizes and margins must be rejected at the boundary,
+// leaving every computed coordinate finite and the layout free of panics.
+#[test]
+fn nonfinite_inputs_stay_finite() {
+    let bad = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
+    for &v in &bad {
+        let mut root = Node::row()
+            .width(100.0)
+            .height(40.0)
+            .gap(v)
+            .child(Node::boxed().width(v).height(10.0))
+            .child(Node::boxed().width(20.0).height(v).margin(EdgeInsets::all(v)))
+            .child(Node::boxed().grow(1.0).max_width(v).min_height(v));
+        assign_ids(&mut root);
+        compute_layout(&mut root, Size::new(v, 40.0));
+        check_node(&root);
+        for child in &root.children {
+            assert!(
+                child.rect.x.is_finite()
+                    && child.rect.y.is_finite()
+                    && child.rect.w.is_finite()
+                    && child.rect.h.is_finite(),
+                "non-finite rect from input {v}: {:?}",
+                child.rect
+            );
+        }
+    }
+}
+
+// The invariant checker is itself under test: a layout that violates containment
+// or produces a non-finite coordinate must be rejected, otherwise the gate could
+// silently pass a broken solver.
+#[test]
+fn invariant_checker_catches_bad_layouts() {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+
+    let build = || {
+        let mut root = Node::row()
+            .width(100.0)
+            .height(20.0)
+            .child(Node::boxed().width(20.0).height(20.0))
+            .child(Node::boxed().width(20.0).height(20.0));
+        assign_ids(&mut root);
+        compute_layout(&mut root, Size::new(100.0, 20.0));
+        root
+    };
+
+    // A good layout passes.
+    let good = build();
+    assert!(std::panic::catch_unwind(|| check_node(&good)).is_ok());
+
+    // A child pushed outside the parent content box on the main axis is caught.
+    let mut escaped = build();
+    escaped.children[0].rect.x = 500.0;
+    assert!(
+        std::panic::catch_unwind(|| check_node(&escaped)).is_err(),
+        "checker missed a child escaping the content box"
+    );
+
+    // A non-finite coordinate is caught.
+    let mut nan = build();
+    nan.children[1].rect.y = f64::NAN;
+    assert!(
+        std::panic::catch_unwind(|| check_node(&nan)).is_err(),
+        "checker missed a non-finite coordinate"
+    );
+
+    // Overlapping siblings are caught.
+    let mut overlap = build();
+    overlap.children[1].rect.x = overlap.children[0].rect.x;
+    assert!(
+        std::panic::catch_unwind(|| check_node(&overlap)).is_err(),
+        "checker missed overlapping siblings"
+    );
+
+    std::panic::set_hook(prev);
 }
