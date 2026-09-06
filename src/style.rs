@@ -167,6 +167,14 @@ pub struct Style {
     pub gap: f64,
     pub width: Dimension,
     pub height: Dimension,
+    /// Lower bound on the resolved width. `Auto` means no minimum.
+    pub min_width: Dimension,
+    /// Upper bound on the resolved width. `Auto` means no maximum.
+    pub max_width: Dimension,
+    /// Lower bound on the resolved height. `Auto` means no minimum.
+    pub min_height: Dimension,
+    /// Upper bound on the resolved height. `Auto` means no maximum.
+    pub max_height: Dimension,
     pub flex_grow: f64,
     pub flex_shrink: f64,
     pub margin: EdgeInsets,
@@ -184,6 +192,10 @@ impl Default for Style {
             gap: 0.0,
             width: Dimension::Auto,
             height: Dimension::Auto,
+            min_width: Dimension::Auto,
+            max_width: Dimension::Auto,
+            min_height: Dimension::Auto,
+            max_height: Dimension::Auto,
             flex_grow: 0.0,
             flex_shrink: 0.0,
             margin: EdgeInsets::ZERO,
@@ -209,6 +221,42 @@ impl Style {
         match dir {
             Direction::Row => self.height,
             Direction::Column => self.width,
+        }
+    }
+
+    /// The main axis minimum length for the given direction.
+    #[must_use]
+    pub fn min_main_dim(&self, dir: Direction) -> Dimension {
+        match dir {
+            Direction::Row => self.min_width,
+            Direction::Column => self.min_height,
+        }
+    }
+
+    /// The main axis maximum length for the given direction.
+    #[must_use]
+    pub fn max_main_dim(&self, dir: Direction) -> Dimension {
+        match dir {
+            Direction::Row => self.max_width,
+            Direction::Column => self.max_height,
+        }
+    }
+
+    /// The cross axis minimum length for the given direction.
+    #[must_use]
+    pub fn min_cross_dim(&self, dir: Direction) -> Dimension {
+        match dir {
+            Direction::Row => self.min_height,
+            Direction::Column => self.min_width,
+        }
+    }
+
+    /// The cross axis maximum length for the given direction.
+    #[must_use]
+    pub fn max_cross_dim(&self, dir: Direction) -> Dimension {
+        match dir {
+            Direction::Row => self.max_height,
+            Direction::Column => self.max_width,
         }
     }
 

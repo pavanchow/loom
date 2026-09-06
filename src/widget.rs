@@ -106,6 +106,30 @@ impl Node {
     }
 
     #[must_use]
+    pub fn min_width(mut self, v: f64) -> Node {
+        self.style.min_width = Dimension::Points(v);
+        self
+    }
+
+    #[must_use]
+    pub fn max_width(mut self, v: f64) -> Node {
+        self.style.max_width = Dimension::Points(v);
+        self
+    }
+
+    #[must_use]
+    pub fn min_height(mut self, v: f64) -> Node {
+        self.style.min_height = Dimension::Points(v);
+        self
+    }
+
+    #[must_use]
+    pub fn max_height(mut self, v: f64) -> Node {
+        self.style.max_height = Dimension::Points(v);
+        self
+    }
+
+    #[must_use]
     pub fn grow(mut self, v: f64) -> Node {
         self.style.flex_grow = v;
         self
@@ -129,7 +153,6 @@ impl Node {
         self
     }
 
-    #[must_use]
     /// Enable wrapping so children break onto new lines when the line is full.
     #[must_use]
     pub fn wrap(mut self) -> Node {
@@ -137,6 +160,7 @@ impl Node {
         self
     }
 
+    #[must_use]
     pub fn align(mut self, v: Align) -> Node {
         self.style.align = v;
         self

@@ -5,8 +5,76 @@
 //! includes the node border and padding but excludes its margin.
 
 use crate::geometry::{Rect, Size};
-use crate::style::{Align, Dimension, Direction, FlexWrap, Justify};
+use crate::style::{Align, Dimension, Direction, EdgeInsets, FlexWrap, Justify, Style};
 use crate::widget::Node;
+
+/// Maps a non-finite value (NaN or an infinity) to zero, leaving finite values
+/// untouched. Used to reject non-finite inputs at the layout boundary.
+fn finite(v: f64) -> f64 {
+    if v.is_finite() {
+        v
+    } else {
+        0.0
+    }
+}
+
+/// A non-finite fixed length is not a usable size, so it degrades to `Auto` and
+/// the node falls back to content or fill sizing instead of poisoning the tree.
+fn sanitize_dim(d: Dimension) -> Dimension {
+    match d {
+        Dimension::Points(v) if !v.is_finite() => Dimension::Auto,
+        other => other,
+    }
+}
+
+fn sanitize_insets(e: EdgeInsets) -> EdgeInsets {
+    EdgeInsets {
+        top: finite(e.top),
+        right: finite(e.right),
+        bottom: finite(e.bottom),
+        left: finite(e.left),
+    }
+}
+
+fn sanitize_style(s: &mut Style) {
+    s.gap = finite(s.gap).max(0.0);
+    s.flex_grow = finite(s.flex_grow);
+    s.flex_shrink = finite(s.flex_shrink);
+    s.width = sanitize_dim(s.width);
+    s.height = sanitize_dim(s.height);
+    s.min_width = sanitize_dim(s.min_width);
+    s.max_width = sanitize_dim(s.max_width);
+    s.min_height = sanitize_dim(s.min_height);
+    s.max_height = sanitize_dim(s.max_height);
+    s.margin = sanitize_insets(s.margin);
+    s.border = sanitize_insets(s.border);
+    s.padding = sanitize_insets(s.padding);
+}
+
+/// Walks the tree once and normalizes every non-finite style value. This is the
+/// single choke point that guarantees the solver only ever sees finite input,
+/// no matter how a `Style` was constructed.
+fn sanitize_tree(node: &mut Node) {
+    sanitize_style(&mut node.style);
+    for child in &mut node.children {
+        sanitize_tree(child);
+    }
+}
+
+/// Clamps a resolved length to the `[min, max]` bounds for one axis. `Auto`
+/// bounds mean no minimum (zero) and no maximum (infinity). When a minimum
+/// exceeds a maximum the minimum wins, matching the CSS resolution order.
+fn clamp_axis(v: f64, min: Dimension, max: Dimension) -> f64 {
+    let lo = match min {
+        Dimension::Points(m) => m.max(0.0),
+        Dimension::Auto => 0.0,
+    };
+    let hi = match max {
+        Dimension::Points(m) => m.max(0.0),
+        Dimension::Auto => f64::INFINITY,
+    };
+    v.clamp(lo, lo.max(hi))
+}
 
 fn axis_main(s: Size, dir: Direction) -> f64 {
     match dir {
@@ -50,7 +118,9 @@ pub fn natural_size(node: &Node) -> Size {
         Dimension::Points(v) => v,
         Dimension::Auto => content.h + inner.vertical(),
     };
-    Size::new(w.max(0.0), h.max(0.0))
+    let w = clamp_axis(w.max(0.0), s.min_width, s.max_width);
+    let h = clamp_axis(h.max(0.0), s.min_height, s.max_height);
+    Size::new(w, h)
 }
 
 /// The natural content size of a container derived from its children. The main
@@ -78,9 +148,13 @@ fn container_content_size(node: &Node) -> Size {
 /// Runs layout for a whole tree. The root takes its fixed size if one is set,
 /// otherwise it fills the available size.
 pub fn compute_layout(root: &mut Node, avail: Size) {
+    sanitize_tree(root);
+    let avail = Size::new(finite(avail.w), finite(avail.h));
     let w = root.style.width.resolve_or(avail.w);
     let h = root.style.height.resolve_or(avail.h);
-    layout_node(root, Rect::new(0.0, 0.0, w.max(0.0), h.max(0.0)));
+    let w = clamp_axis(w.max(0.0), root.style.min_width, root.style.max_width);
+    let h = clamp_axis(h.max(0.0), root.style.min_height, root.style.max_height);
+    layout_node(root, Rect::new(0.0, 0.0, w, h));
 }
 
 /// Assigns `rect` as this node border box, then arranges its children inside
@@ -150,9 +224,12 @@ fn arrange_children(node: &mut Node) {
         .children
         .iter()
         .zip(naturals.iter())
-        .map(|(child, nat)| match child.style.main_dim(dir) {
-            Dimension::Points(v) => v.max(0.0),
-            Dimension::Auto => axis_main(*nat, dir),
+        .map(|(child, nat)| {
+            let raw = match child.style.main_dim(dir) {
+                Dimension::Points(v) => v.max(0.0),
+                Dimension::Auto => axis_main(*nat, dir),
+            };
+            clamp_axis(raw, child.style.min_main_dim(dir), child.style.max_main_dim(dir))
         })
         .collect();
     let grow: Vec<f64> = node.children.iter().map(|c| c.style.flex_grow).collect();
@@ -202,7 +279,7 @@ fn arrange_children(node: &mut Node) {
         let margin = node.children[i].style.margin;
         cursor += margin.main_start(dir);
 
-        let cross_size = match node.children[i].style.cross_dim(dir) {
+        let cross_raw = match node.children[i].style.cross_dim(dir) {
             Dimension::Points(v) => v.max(0.0),
             Dimension::Auto => {
                 if align == Align::Stretch {
@@ -212,16 +289,26 @@ fn arrange_children(node: &mut Node) {
                 }
             }
         };
+        let cross_size = clamp_axis(
+            cross_raw,
+            node.children[i].style.min_cross_dim(dir),
+            node.children[i].style.max_cross_dim(dir),
+        );
+        let main = clamp_axis(
+            main_size[i],
+            node.children[i].style.min_main_dim(dir),
+            node.children[i].style.max_main_dim(dir),
+        );
         let cross_free = cross_avail - cross_size - margin.cross_total(dir);
         let cross_pos = cross_origin + margin.cross_start(dir) + align_offset(align, cross_free);
 
         let child_rect = match dir {
-            Direction::Row => Rect::new(cursor, cross_pos, main_size[i], cross_size),
-            Direction::Column => Rect::new(cross_pos, cursor, cross_size, main_size[i]),
+            Direction::Row => Rect::new(cursor, cross_pos, main, cross_size),
+            Direction::Column => Rect::new(cross_pos, cursor, cross_size, main),
         };
         layout_node(&mut node.children[i], child_rect);
 
-        cursor += main_size[i] + margin.main_end(dir);
+        cursor += main + margin.main_end(dir);
         if i + 1 < n {
             cursor += gap + spacing;
         }
@@ -273,9 +360,10 @@ fn resolve_shrink(main_size: &mut [f64], base: &[f64], shrink: &[f64], deficit: 
 /// a line stays open while the running main sizes plus gaps fit the content
 /// main axis, and a child that alone overflows gets a line of its own. Each
 /// line resolves grow, shrink, justify, and child align exactly like a
-/// NoWrap container over its members. A line's cross size is the largest
+/// `NoWrap` container over its members. A line's cross size is the largest
 /// member cross extent, and stretch children fill their line rather than the
 /// container. Lines stack from the content origin along the cross axis.
+#[allow(clippy::too_many_lines)] // the wrap solver reads as one continuous pass
 fn arrange_wrapped(node: &mut Node) {
     let dir = node.style.direction;
     let align = node.style.align;
@@ -295,9 +383,12 @@ fn arrange_wrapped(node: &mut Node) {
         .children
         .iter()
         .zip(naturals.iter())
-        .map(|(child, nat)| match child.style.main_dim(dir) {
-            Dimension::Points(v) => v.max(0.0),
-            Dimension::Auto => axis_main(*nat, dir),
+        .map(|(child, nat)| {
+            let raw = match child.style.main_dim(dir) {
+                Dimension::Points(v) => v.max(0.0),
+                Dimension::Auto => axis_main(*nat, dir),
+            };
+            clamp_axis(raw, child.style.min_main_dim(dir), child.style.max_main_dim(dir))
         })
         .collect();
     let grow: Vec<f64> = node.children.iter().map(|c| c.style.flex_grow).collect();
@@ -307,10 +398,10 @@ fn arrange_wrapped(node: &mut Node) {
     let mut lines: Vec<Vec<usize>> = Vec::new();
     let mut current: Vec<usize> = Vec::new();
     let mut current_cost = 0.0;
-    for i in 0..node.children.len() {
-        let cost = base[i] + node.children[i].style.margin.main_total(dir);
-        let with_gap = if current.is_empty() { 0.0 } else { gap };
-        if !current.is_empty() && current_cost + with_gap + cost > main_avail + 1e-9 {
+    for (i, &b) in base.iter().enumerate() {
+        let cost = b + node.children[i].style.margin.main_total(dir);
+        let add_gap = if current.is_empty() { 0.0 } else { gap };
+        if !current.is_empty() && current_cost + add_gap + cost > main_avail + 1e-9 {
             lines.push(std::mem::take(&mut current));
             current_cost = 0.0;
         }
@@ -360,10 +451,15 @@ fn arrange_wrapped(node: &mut Node) {
             .iter()
             .map(|&i| {
                 let m = &node.children[i].style.margin;
-                let cs = match node.children[i].style.cross_dim(dir) {
+                let cs_raw = match node.children[i].style.cross_dim(dir) {
                     Dimension::Points(v) => v.max(0.0),
                     Dimension::Auto => axis_cross(naturals[i], dir),
                 };
+                let cs = clamp_axis(
+                    cs_raw,
+                    node.children[i].style.min_cross_dim(dir),
+                    node.children[i].style.max_cross_dim(dir),
+                );
                 cs + m.cross_total(dir)
             })
             .fold(0.0, f64::max);
@@ -384,7 +480,7 @@ fn arrange_wrapped(node: &mut Node) {
             let margin = node.children[i].style.margin;
             cursor += margin.main_start(dir);
 
-            let cross_size = match node.children[i].style.cross_dim(dir) {
+            let cross_raw = match node.children[i].style.cross_dim(dir) {
                 Dimension::Points(v) => v.max(0.0),
                 Dimension::Auto => {
                     if align == Align::Stretch {
@@ -394,16 +490,26 @@ fn arrange_wrapped(node: &mut Node) {
                     }
                 }
             };
+            let cross_size = clamp_axis(
+                cross_raw,
+                node.children[i].style.min_cross_dim(dir),
+                node.children[i].style.max_cross_dim(dir),
+            );
+            let main = clamp_axis(
+                slot,
+                node.children[i].style.min_main_dim(dir),
+                node.children[i].style.max_main_dim(dir),
+            );
             let cross_free = line_cross - cross_size - margin.cross_total(dir);
             let cross_pos = cross_cursor + margin.cross_start(dir) + align_offset(align, cross_free);
 
             let child_rect = match dir {
-                Direction::Row => Rect::new(cursor, cross_pos, slot, cross_size),
-                Direction::Column => Rect::new(cross_pos, cursor, cross_size, slot),
+                Direction::Row => Rect::new(cursor, cross_pos, main, cross_size),
+                Direction::Column => Rect::new(cross_pos, cursor, cross_size, main),
             };
             layout_node(&mut node.children[i], child_rect);
 
-            cursor += slot + margin.main_end(dir);
+            cursor += main + margin.main_end(dir);
             if j + 1 < line_len {
                 cursor += gap + spacing;
             }
