@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
 <title>Loom Playground</title>
 <style>
   /* Base theme. Light by default. All colors flow through CSS variables so the
@@ -184,6 +185,7 @@
 </head>
 <body>
 <header>
+  <img src="logo.svg" alt="Loom logo" width="72" height="72">
   <h1>Loom Playground</h1>
   <p>
     A live, teaching-accurate reimplementation of the Loom layout solver. Build a
@@ -302,7 +304,8 @@
 
   <!-- Help -->
   <div class="card help">
-    <h2>How to use this playground</h2>
+    <details>
+    <summary>How to use this playground</summary>
     <div class="tour">
       <b>Guided tour.</b> Start with the sample already on the stage. Click the blue
       toolbar row at the top to select it, then set <b>Justify</b> to
@@ -354,6 +357,7 @@
       <li>The widget tree mirrors the stage. Selecting in one highlights the
         other.</li>
     </ul>
+    </details>
   </div>
 </div>
 

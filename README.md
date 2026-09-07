@@ -1,3 +1,5 @@
+<img src="docs/logo.svg" alt="Loom logo" width="96">
+
 # Loom
 
 Loom is a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node using a flexbox style constraint solver, with optional wrapping so children break onto new lines when a line fills up. It has no external crates, targets edition 2021, and the whole core is headless so it can be tested without a screen.
