@@ -3,8 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loom: a from-scratch flexbox layout engine in Rust</title>
+<meta name="description" content="Loom by Pavan Nallamothu: a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node with a flexbox style constraint solver, with optional wrapping. Build a tree, set flex and spacing, and drag the size slider to watch every box reflow, live.">
+<meta name="author" content="Pavan Nallamothu (pavanchow)">
+<link rel="canonical" href="https://pavanchow.github.io/loom/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
-<title>Loom Playground</title>
+<link rel="author" href="https://github.com/pavanchow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Loom: a from-scratch flexbox layout engine in Rust">
+<meta property="og:description" content="A dependency free, headless GUI layout engine: a tree of widgets and a size in, exact pixel rectangles out. Flexbox style constraints with wrapping. Watch every box reflow, live. By Pavan Nallamothu.">
+<meta property="og:url" content="https://pavanchow.github.io/loom/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Loom: a from-scratch flexbox layout engine in Rust">
+<meta name="twitter:description" content="Build a widget tree, set flex and spacing, drag the size slider, and watch a flexbox solver reflow every box.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Loom","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"Loom is a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node using a flexbox style constraint solver, with optional wrapping. The core is headless and fully tested, with a Renderer trait as the only seam to the outside.","url":"https://pavanchow.github.io/loom/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/loom","license":"https://opensource.org/licenses/MIT"}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+</script>
 <style>
   /* Base theme. Light by default. All colors flow through CSS variables so the
      dark override below only has to redeclare the variables and the body. */
@@ -181,22 +198,60 @@
   .help .tour { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
   code { font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--line);
          border-radius: 6px; padding: 1px 5px; font-size: 13px; }
+
+  /* cocoon-grade page chrome, layered over the existing playground styles */
+  html { scroll-behavior: smooth; }
+  nav.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--line); }
+  nav.top .navrow { display: flex; justify-content: space-between; align-items: center; height: 56px; max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+  nav.top .brand { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; color: var(--ink); }
+  nav.top .brand .gem { width: 16px; height: 16px; border-radius: 5px; background: linear-gradient(135deg, #4da3ff, #0071e3); }
+  nav.top .links { display: flex; gap: 24px; align-items: center; }
+  nav.top .links a { color: var(--ink); font-size: 14.5px; text-decoration: none; }
+  nav.top .links a:hover { text-decoration: underline; }
+  @media (max-width: 640px) { nav.top .links a:not(.gh) { display: none; } }
+  .hero { padding: 70px 24px 8px; text-align: center; }
+  .hero .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); display: block; margin-top: 12px; }
+  .hero h1 { font-size: clamp(38px, 7vw, 64px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 680; margin: 16px 0 0; }
+  .hero p.sub { max-width: 720px; margin: 22px auto 0; font-size: clamp(17px, 2.1vw, 21px); color: var(--ink-soft); }
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
+  .cta-row a { display: inline-block; padding: 13px 26px; border-radius: 999px; font-size: 15px; font-weight: 600; border: 1px solid var(--ink); color: var(--ink); text-decoration: none; }
+  .cta-row a:hover { opacity: 0.75; }
+  .cta-row a.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .narrative { padding: 72px 0; border-top: 1px solid var(--line); }
+  .narrative .ninner { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  .narrative h2 { font-size: clamp(26px, 4.2vw, 38px); line-height: 1.12; letter-spacing: -0.025em; font-weight: 660; text-align: center; margin: 0 auto; }
+  .narrative .lead { max-width: 720px; margin: 18px auto 0; text-align: center; color: var(--ink-soft); }
+  .narrative pre { background: #15161c; color: #ececf4; border-radius: 14px; padding: 20px 22px; font-family: var(--mono); font-size: 13px; line-height: 1.6; overflow-x: auto; margin: 26px auto 0; white-space: pre; }
+  .narrative pre .cm { color: #8a8d9a; }
+  .narrative pre .g { color: #7fd6a0; }
+  footer.site { padding: 60px 24px; border-top: 1px solid var(--line); text-align: center; color: var(--ink-soft); font-size: 14px; }
+  footer.site .name { color: var(--ink); font-weight: 600; }
+  footer.site p + p { margin-top: 10px; }
+  footer.site a { color: var(--accent); text-decoration: none; }
 </style>
 </head>
 <body>
-<header>
+
+<noscript><div style="max-width:1240px;margin:0 auto;padding:40px 24px;color:var(--ink-soft)">Loom is a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node with a flexbox style constraint solver, with optional wrapping. Source: <a href="https://github.com/pavanchow/loom">github.com/pavanchow/loom</a>.</div></noscript>
+
+<nav class="top"><div class="navrow">
+  <div class="brand"><span class="gem"></span>Loom</div>
+  <div class="links"><a href="#sim">Playground</a><a href="#how">How it works</a><a href="#use">Use it</a><a class="gh" href="https://github.com/pavanchow/loom">GitHub</a></div>
+</div></nav>
+
+<div class="hero">
   <img src="logo.svg" alt="Loom logo" width="72" height="72">
-  <h1>Loom Playground</h1>
-  <p>
-    A live, teaching-accurate reimplementation of the Loom layout solver. Build a
-    tree, set flex and spacing, and drag the size slider to watch every box
-    reflow. This page runs the same algorithm as the Rust engine at
-    <a href="https://github.com/pavanchow/loom">github.com/pavanchow/loom</a>.
-  </p>
-</header>
+  <span class="eyebrow">Rust · flexbox layout engine from scratch</span>
+  <h1>Watch a layout<br>solve itself.</h1>
+  <p class="sub">Loom is a dependency free, retained mode GUI layout engine written in pure Rust. Give it a tree of widgets and a container size and it computes the exact border box rectangle of every node with a flexbox style constraint solver, with optional wrapping. The core is headless, so it can run and be tested without a screen. Build a tree, set flex and spacing, and drag the size slider to watch every box reflow, live.</p>
+  <div class="cta-row">
+    <a class="primary" href="#sim">Open the playground</a>
+    <a href="https://github.com/pavanchow/loom">View on GitHub</a>
+  </div>
+</div>
 
 <div class="wrap">
-  <div class="grid">
+  <div class="grid" id="sim">
     <!-- Left: controls -->
     <div class="card" id="controls">
       <h2>Inspector</h2>
@@ -360,6 +415,36 @@
     </details>
   </div>
 </div>
+
+<section class="narrative" id="how"><div class="ninner">
+  <h2>One question, answered exactly</h2>
+  <p class="lead">Loom separates the math from the pixels. Given a tree of widgets and a container size, it computes the exact border box rectangle of every node with a flexbox style constraint solver, with optional wrapping. There is no windowing crate, no font backend, no GPU. A Renderer trait is the only seam to the outside, so the same layout can drive a terminal, an SVG file, a canvas, or a GPU backend.</p>
+  <pre><span class="cm"># a spacer absorbs all leftover space on the main axis, exactly:</span>
+root.children[1].rect.w == 200.0 - 48.0 - 64.0 - 8.0 * 2.0
+
+<span class="g"># golden layouts pin exact rectangles; invariants run over random trees</span>
+<span class="g"># fed huge, fractional, and non finite sizes; a determinism gate proves</span>
+<span class="g"># the same tree gives identical rectangles on every run</span></pre>
+  <p class="lead" style="margin-top:24px">Correctness is committed as tests that run on every build. Every child rectangle must lie inside its parent content box on any axis that fits, siblings must never overlap, no coordinate may be non finite, and equal flex children must fill the main axis within a pixel. A self check even corrupts a good layout to prove the invariant checker rejects it, so a passing gate cannot be a blind gate.</p>
+</div></section>
+
+<section class="narrative" id="use"><div class="ninner">
+  <h2>Use it</h2>
+  <pre><span class="cm"># print the computed rectangle tree at 800 x 600</span>
+cargo run -- 800 600
+
+<span class="cm"># also print draw calls and a hit test probe</span>
+cargo run -- demo
+
+<span class="cm"># run the correctness gates and unit tests</span>
+cargo test
+LOOM_FUZZ_OPS=5000 cargo test invariants</pre>
+</div></section>
+
+<footer class="site">
+  <p>Loom is MIT licensed. Source, tests, and design notes are on <a href="https://github.com/pavanchow/loom">GitHub</a>.</p>
+  <p>By <span class="name">Pavan Nallamothu</span>.</p>
+</footer>
 
 <script>
 "use strict";
