@@ -3,25 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loom: a from-scratch flexbox layout engine in Rust</title>
-<meta name="description" content="Loom by Pavan Nallamothu: a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node with a flexbox style constraint solver, with optional wrapping. Build a tree, set flex and spacing, and drag the size slider to watch every box reflow, live.">
-<meta name="author" content="Pavan Nallamothu (pavanchow)">
-<meta name="keywords" content="layout engine, flexbox, from scratch, Rust, retained mode GUI, constraint solver, box model, border box, flex grow, flex shrink, wrapping, headless layout, Renderer trait, deterministic layout, Yoga, Taffy, dependency free, Pavan Nallamothu, pavanchow">
+<title>Loom: dependency-free flexbox layout engine in Rust | Pavan Nallamothu</title>
+<meta name="description" content="Loom, a dependency-free flexbox layout engine in pure Rust: give it a widget tree and a container size, get the exact pixel box of every node. By Pavan Nallamothu.">
+<meta name="keywords" content="layout engine, flexbox layout engine, GUI layout engine, constraint solver, box model, flex grow, flex shrink, retained mode GUI, headless layout, deterministic layout, Rust layout engine, Yoga alternative, Taffy alternative, dependency free, Pavan Nallamothu, pavanchow">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="author" content="Pavan Nallamothu">
+<link rel="author" href="https://github.com/pavanchow">
 <link rel="canonical" href="https://pavanchow.github.io/loom/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
-<link rel="author" href="https://github.com/pavanchow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Loom: a from-scratch flexbox layout engine in Rust">
-<meta property="og:description" content="A dependency free, headless GUI layout engine: a tree of widgets and a size in, exact pixel rectangles out. Flexbox style constraints with wrapping. Watch every box reflow, live. By Pavan Nallamothu.">
+<meta property="og:site_name" content="Pavan Nallamothu">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="Loom: dependency-free flexbox layout engine in Rust | Pavan Nallamothu">
+<meta property="og:description" content="A dependency-free flexbox layout engine in pure Rust: a widget tree and a container size in, the exact pixel box of every node out, with optional wrapping. By Pavan Nallamothu.">
 <meta property="og:url" content="https://pavanchow.github.io/loom/">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Loom: a from-scratch flexbox layout engine in Rust">
-<meta name="twitter:description" content="Build a widget tree, set flex and spacing, drag the size slider, and watch a flexbox solver reflow every box.">
+<meta property="og:image" content="https://pavanchow.github.io/loom/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Loom by Pavan Nallamothu">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@pavanchow">
+<meta name="twitter:creator" content="@pavanchow">
+<meta name="twitter:title" content="Loom: dependency-free flexbox layout engine in Rust | Pavan Nallamothu">
+<meta name="twitter:description" content="A dependency-free flexbox layout engine in pure Rust: a widget tree and a container size in, the exact pixel box of every node out. By Pavan Nallamothu.">
+<meta name="twitter:image" content="https://pavanchow.github.io/loom/og-image.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Loom","applicationCategory":"DeveloperApplication","softwareVersion":"0.1.0","operatingSystem":"Linux, macOS, Windows","description":"Loom is a dependency free, retained mode GUI layout engine written in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node using a flexbox style constraint solver, with optional wrapping. The core is headless and fully tested, with a Renderer trait as the only seam to the outside.","url":"https://pavanchow.github.io/loom/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/loom","license":"https://opensource.org/licenses/MIT"}
-</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://pavanchow.github.io/loom/#software","name":"Loom","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"A dependency-free, retained-mode GUI layout engine in pure Rust. It takes a tree of widgets and a container size and computes the exact pixel rectangle of every node with a flexbox-style constraint solver, with optional wrapping.","url":"https://pavanchow.github.io/loom/","image":"https://pavanchow.github.io/loom/og-image.png","softwareVersion":"0.1.0","programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/loom","license":"https://opensource.org/licenses/MIT","datePublished":"2026-08-21","author":{"@id":"https://github.com/pavanchow#person"},"publisher":{"@id":"https://github.com/pavanchow#person"},"keywords":"layout engine, flexbox, constraint solver, retained mode GUI, headless layout, Rust","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Flexbox-style constraint solver","Retained-mode widget tree","Exact pixel rectangle for every node","Optional line wrapping","Headless core with a Renderer trait seam","Dependency-free pure Rust"]},{"@type":"Person","@id":"https://github.com/pavanchow#person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","jobTitle":"Software Engineer and Security Researcher","knowsAbout":["Rust","GUI layout","flexbox","constraint solving","user interface engineering","computer graphics"],"sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]},{"@type":"WebSite","@id":"https://pavanchow.github.io/loom/#website","name":"Loom by Pavan Nallamothu","url":"https://pavanchow.github.io/loom/","author":{"@id":"https://github.com/pavanchow#person"},"inLanguage":"en"},{"@type":"BreadcrumbList","@id":"https://pavanchow.github.io/loom/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Pavan Nallamothu","item":"https://github.com/pavanchow"},{"@type":"ListItem","position":2,"name":"Loom","item":"https://pavanchow.github.io/loom/"}]},{"@type":"WebPage","@id":"https://pavanchow.github.io/loom/#webpage","url":"https://pavanchow.github.io/loom/","name":"Loom: dependency-free flexbox layout engine in Rust | Pavan Nallamothu","isPartOf":{"@id":"https://pavanchow.github.io/loom/#website"},"about":{"@id":"https://pavanchow.github.io/loom/#software"},"author":{"@id":"https://github.com/pavanchow#person"},"inLanguage":"en"}]}
 </script>
 <style>
   /* Base theme. Light by default. All colors flow through CSS variables so the
@@ -523,6 +530,17 @@ LOOM_FUZZ_OPS=5000 cargo test invariants</pre>
 <footer class="site">
   <p>Loom is MIT licensed. Source, tests, and design notes are on <a href="https://github.com/pavanchow/loom">GitHub</a>.</p>
   <p>By <span class="name">Pavan Nallamothu</span>.</p>
+  <div style="max-width:760px;margin:40px auto 0;text-align:left">
+    <p style="text-align:center;font-weight:600;color:var(--ink);margin-bottom:16px">More open-source tools by Pavan Nallamothu</p>
+    <ul style="list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px 28px;padding:0;font-size:14.5px">
+      <li><a href="https://pavanchow.github.io/prism/">Prism</a>: a software rasterizer that draws real 3D triangles on the CPU</li>
+      <li><a href="https://pavanchow.github.io/lighthouse/">Lighthouse</a>: a from-scratch browser rendering engine in pure Rust</li>
+      <li><a href="https://pavanchow.github.io/kaleidoscope/">Kaleidoscope</a>: a browser engine with HTML parser, CSS cascade, layout, and paint</li>
+      <li><a href="https://pavanchow.github.io/pane/">Pane</a>: a dependency-free tiling window manager engine in pure Rust</li>
+      <li><a href="https://pavanchow.github.io/forge/">Forge</a>: a dependency-free 2D game engine in pure Rust std</li>
+    </ul>
+    <p style="text-align:center;margin-top:22px"><a href="https://github.com/pavanchow">All projects on GitHub: github.com/pavanchow</a></p>
+  </div>
 </footer>
 
 <script>
