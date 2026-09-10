@@ -6,6 +6,8 @@ Loom is a dependency free, retained mode GUI layout engine written in pure Rust.
 
 **[Live demo](https://pavanchow.github.io/loom/)** · MIT licensed · pure Rust
 
+Built from scratch by [Pavan Nallamothu](https://pavanchow.github.io/) ([LinkedIn](https://www.linkedin.com/in/pavanchow/), [GitHub](https://github.com/pavanchow)).
+
 ## The gap it fills
 
 Most layout code is welded to a rendering stack. To compute where a button lands you often need a windowing crate, a font backend, and a GPU surface. That is a lot of surface area when all you want is the geometry.
